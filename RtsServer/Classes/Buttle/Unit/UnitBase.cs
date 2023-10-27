@@ -6,7 +6,7 @@ namespace RtsServer.Classes.Buttle.Unit
     {
         public int Health;
         public int MaxHealth;
-        public string UnitCode;
+        public string? UnitCode;
 
         public Vector2Float Position;
     }
