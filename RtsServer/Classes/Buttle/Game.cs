@@ -5,7 +5,7 @@ namespace RtsServer.Classes.Buttle
 {
     public class Game
     {
-        public MapBase Map { get; set; }
+        public MapBase? Map { get; set; }
 
         public void GenerateRandomMap()
         {
