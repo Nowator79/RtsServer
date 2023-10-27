@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net6.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Pomelo.EntityFrameworkCore.MySql" Version="7.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="Classes\Processor\Game\Battle\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="DtoNetWorkRts">
+      <HintPath>..\..\DtoNetWorkRts\DtoNetWorkRts\bin\Debug\net6.0\DtoNetWorkRts.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+
+</Project>
