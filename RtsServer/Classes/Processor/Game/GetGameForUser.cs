@@ -7,6 +7,7 @@ namespace RtsServer.Classes.Processor.Game
     {  
         public override void Handler(MainResponse response, GameServer context, UserClientTcp clientTcp)
         {
+
             MainResponse responseGame = new(response.type, response.action, response.status);
             Buttle.Game game = context.ButtleManager.Games.First();
 
