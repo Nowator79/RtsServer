@@ -7,16 +7,18 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
-    <LangVersion>preview</LangVersion>
-  </PropertyGroup>
-
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
-    <LangVersion>preview</LangVersion>
-  </PropertyGroup>
-
   <ItemGroup>
     <PackageReference Include="Pomelo.EntityFrameworkCore.MySql" Version="7.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="Classes\Processor\Game\Battle\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="DtoNetWorkRts">
+      <HintPath>..\..\DtoNetWorkRts\DtoNetWorkRts\bin\Debug\net6.0\DtoNetWorkRts.dll</HintPath>
+    </Reference>
   </ItemGroup>
 
 </Project>
