@@ -1,11 +1,12 @@
 ﻿using RtsServer.App;
+using RtsServer.App.Buttle.Dto;
 
-//Vector2Float G = new(457, 610);
-//Vector2Float GFacting = new(2775, 1367);
-//Vector2Float HPosition = new(457, 889);
+//Vector2Float G = new(1, 3);
+//Vector2Float GFacting = new(1, 1);
+//Vector2Float HPosition = new(3, 2);
 //Console.WriteLine(Vector2Float.AngleByVectorsAndRot(G, GFacting, HPosition));
 //Console.WriteLine(Vector2Float.SideByVector(G, GFacting, HPosition));
-
+//return;
 int port = 8080;
 
 GameServer server = new(port);

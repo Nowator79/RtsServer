@@ -109,14 +109,16 @@ namespace RtsServer.App.Buttle
         public int StartSingleGame()
         {
             Game game = new(Games.Count, this);
-            Soldier soldier = new(new Dto.Vector2Float(0, 0));
+            game.SetMap(MapAdapter.Get(mapFileManager.LoadMapByName("test")));
+
+            Unit soldier = new Soldier(new Dto.Vector2Float());
+            soldier.SetGame(game);
             soldier.SetTargetPosition(new Dto.Vector2Int(1, 9));
             game.AddUnit(soldier);
-            //game.AddUnit(new TankT1(new Dto.Vector2Float(10, 10)));
+
+            game.Start();
+
             AddGame(game);
-            game
-                .SetMap(MapAdapter.Get(mapFileManager.LoadMapByName("sad")))
-                .Start();
             return Games.FindIndex(x => x == game);
         }
     }

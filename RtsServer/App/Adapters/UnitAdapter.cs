@@ -7,7 +7,7 @@ namespace RtsServer.App.Adapters
     {
         public static NUnit Get(Unit unit)
         {
-            return new NUnit(unit.Id, unit.Code, unit.Health.Value, unit.Position);
+            return new NUnit(unit.Id, unit.Code, unit.Health.Value, unit.Position, unit.Rotation);
         }
     }
 }

@@ -7,6 +7,7 @@ namespace RtsServer.App.Buttle.Units
         public Soldier(Vector2Float position) : base("Soldier", new(100), position)
         {
             Speed = 2;
+            RotationSpeed = 2;
         }
     }
 }

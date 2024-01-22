@@ -5,6 +5,7 @@ namespace RtsServer.App.Buttle.Units
 {
     public class Unit
     {
+        private const int KRotationSpeed = 100000;
         public Unit(string xmlId, Health health, Vector2Float position)
         {
             Code = xmlId;
@@ -12,6 +13,7 @@ namespace RtsServer.App.Buttle.Units
             Position = position;
             Navigatior = new GroundUnitNavigator();
             Navigatior.SetUnit(this);
+            Rotation = 0;
         }
 
         public void SetGame(Game context)
@@ -32,7 +34,6 @@ namespace RtsServer.App.Buttle.Units
         /// <returns></returns>
         public Unit SetTargetPosition(Vector2Int TargetPosition)
         {
-
             this.TargetPosition = TargetPosition;
             Navigatior.Start();
 
@@ -67,14 +68,60 @@ namespace RtsServer.App.Buttle.Units
             {
                 Vector2Int lastTargetPoint = PathRout.Last();
                 Vector2Float targetFloat = lastTargetPoint.GetFloat();
+
+                // проверяем последнию точку навигации, если достгли ее то
+                // уравниваем позицию цели к точке навигации и удаляем точку навигации
                 if (Vector2Float.Distance(Position, targetFloat) < 0.05)
                 {
                     SetNewPosition(targetFloat);
                     PathRout.Remove(lastTargetPoint);
+                    return;
                 }
-                Vector2Float newPosition = Position + (targetFloat - Position).Normalize() * Speed * (float)Game.TimeSystem.GetDetlta() * 1000;
-                SetNewPosition(newPosition);
+
+                // Поворачиваемся до цели если поворот правильный идем к цели
+                if (RotationToTarget(targetFloat))
+                {
+                    Vector2Float newPosition = Position + (targetFloat - Position).Normalize() * Speed * (float)Game.TimeSystem.GetDetlta() * 1000;
+                    SetNewPosition(newPosition);
+                }
+
             }
+        }
+
+        public bool RotationToTarget(Vector2Float Target)
+        {
+            Vector2Float GFacting = Vector2Float.VectorByVectorAndAngle(Position, -Rotation);// глобальная точка
+            Vector2Float GFactingC = Vector2Float.VectorByAngle(-Rotation); // локальная точка
+            double AngleToTarget = Vector2Float.AngleByVectorsAndRot(Position, GFactingC.Normalize(), Target);
+            double typeAngle = Vector2Float.SideByVector(Position, GFacting, Target);
+            //typeAngle 1 = right
+            //typeAngle -1 = left
+
+            double upAngle = RotationSpeed * Game.TimeSystem.GetDetlta() * KRotationSpeed;
+            double newAngle = Rotation;
+            if (upAngle > AngleToTarget) upAngle = AngleToTarget;
+            if (typeAngle > 0)
+            {
+                newAngle = Rotation + upAngle;
+            }
+            else if (typeAngle < 0)
+            {
+                newAngle = Rotation - upAngle;
+            }
+
+            Rotation = newAngle;
+
+            if (AngleToTarget%180 < 5 || double.IsNaN(0 / AngleToTarget))
+            {
+                return true;
+            }
+            else
+            {
+                return false;
+            }
+            //Vector2Float HPosition = new(457, 889);
+            //Console.WriteLine(Vector2Float.AngleByVectorsAndRot(G, GFacting, HPosition));
+            //Console.WriteLine(Vector2Float.SideByVector(G, GFacting, HPosition));
         }
 
         /// Идентификаторы 
@@ -83,16 +130,17 @@ namespace RtsServer.App.Buttle.Units
 
         // Состояние 
         public Health Health { get; set; }
-        public Vector2Float Position { get; private set; }
+        public Vector2Float Position { get; protected set; }
 
         // характеристики
-        public float Speed { get; protected set; } = 1;
+        public double Speed { get; protected set; } = 1;
+        public double RotationSpeed { get; protected set; }
 
         // навигация
-        public Vector2Int TargetPosition { get; private set; }
-        public float Rotation { get; private set; }
+        public Vector2Int TargetPosition { get; protected set; }
+        public double Rotation { get; protected set; }
         public HashSet<Vector2Int> PathRout { get; private set; }
-        private INavigator Navigatior { get; set; }
+        protected INavigator Navigatior { get; set; }
 
         // контекст  
         private Game Game { get; set; }
