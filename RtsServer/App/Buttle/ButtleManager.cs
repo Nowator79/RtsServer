@@ -4,24 +4,29 @@ using RtsServer.App.Buttle.Units;
 using RtsServer.App.DataBase.Dto;
 using RtsServer.App.FileSystem;
 using RtsServer.App.FileSystem.Dto;
+using RtsServer.App.ViewConsole;
 
 namespace RtsServer.App.Buttle
 {
     public class ButtleManager
     {
         public List<Game> Games { get; private set; }
-
-        public HashSet<UserAuth> usersForSearching { get; private set; }
-
+        public HashSet<UserAuth> UsersForSearching { get; private set; }
         public GameServer GameServer { get; private set; }
-        public MapFileManager mapFileManager { get; private set; }
+        public MapFileManager MapFileManager { get; private set; }
+        private readonly string[] MapsForPvp = { "sad", "test" };
+        private readonly Random rnd = new();
+
         public ButtleManager(GameServer gameServer)
         {
             GameServer = gameServer;
             Games = new();
-            usersForSearching = new();
-            mapFileManager = new();
-            //StartSingleGame();
+            UsersForSearching = new();
+            MapFileManager = new();
+            if (ConfigGameServer.IsDebugStartGame)
+            {
+                StartSingleGame();
+            }
         }
 
         public void AddGame(Game Game)
@@ -31,11 +36,11 @@ namespace RtsServer.App.Buttle
 
         public void FindUsersForButtle()
         {
-            if (usersForSearching.Count >= 2)
+            if (UsersForSearching.Count >= 2)
             {
                 UserAuth firstUser = null;
                 UserAuth secondUser = null;
-                foreach (UserAuth user in usersForSearching)
+                foreach (UserAuth user in UsersForSearching)
                 {
                     if (firstUser == null)
                     {
@@ -48,8 +53,8 @@ namespace RtsServer.App.Buttle
                     }
                 }
 
-                usersForSearching.Remove(firstUser);
-                usersForSearching.Remove(secondUser);
+                UsersForSearching.Remove(firstUser);
+                UsersForSearching.Remove(secondUser);
 
                 Game game = new(Games.Count, this);
                 game.Players.Add(new Player(firstUser));
@@ -60,7 +65,7 @@ namespace RtsServer.App.Buttle
                 game.AddUnit(soldier);
 
                 game
-                    .SetMap(MapAdapter.Get(mapFileManager.LoadMapByName("sad")))
+                    .SetMap(MapAdapter.Get(MapFileManager.LoadMapByName("sad")))
                     .Start();
 
                 AddGame(game);
@@ -69,10 +74,10 @@ namespace RtsServer.App.Buttle
 
         public void FindUserOneForButtle()
         {
-            if (usersForSearching.Count >= 1)
+            if (UsersForSearching.Count >= 1)
             {
                 UserAuth firstUser = null;
-                foreach (UserAuth user in usersForSearching)
+                foreach (UserAuth user in UsersForSearching)
                 {
                     if (firstUser == null)
                     {
@@ -81,11 +86,12 @@ namespace RtsServer.App.Buttle
                     }
                 }
 
-                usersForSearching.Remove(firstUser);
+                UsersForSearching.Remove(firstUser);
 
                 Game game = new(Games.Count, this);
-                game.SetMap(MapAdapter.Get(mapFileManager.LoadMapByName("test")));
-
+                string nameMap = MapsForPvp[rnd.Next(0, MapsForPvp.Length)];
+                //game.SetMap(MapAdapter.Get(mapFileManager.LoadMapByName(nameMap)));
+                game.SetMap(MapAdapter.Get(MapFileManager.LoadMapByName("test")));
                 game.Players.Add(new Player(firstUser));
 
                 Unit soldier = new Soldier(new Dto.Vector2Float());
@@ -101,7 +107,7 @@ namespace RtsServer.App.Buttle
 
         public void AddUserForSearch(UserAuth user)
         {
-            usersForSearching.Add(user);
+            UsersForSearching.Add(user);
             //FindUsersForButtle();
             FindUserOneForButtle();
         }
@@ -109,7 +115,7 @@ namespace RtsServer.App.Buttle
         public int StartSingleGame()
         {
             Game game = new(Games.Count, this);
-            game.SetMap(MapAdapter.Get(mapFileManager.LoadMapByName("test")));
+            game.SetMap(MapAdapter.Get(MapFileManager.LoadMapByName("test")));
 
             Unit soldier = new Soldier(new Dto.Vector2Float());
             soldier.SetGame(game);

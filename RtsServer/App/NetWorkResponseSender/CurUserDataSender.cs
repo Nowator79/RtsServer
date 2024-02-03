@@ -4,11 +4,11 @@ using RtsServer.App.NetWorkDto.Response;
 
 namespace RtsServer.App.NetWorkResponseSender
 {
-    public class StartGameSender : NetWorkSenderBase
+    public class CurUserDataSender : NetWorkSenderBase
     {
-        public StartGameSender(UserClientTcp clientApi) : base(clientApi)
+        public CurUserDataSender(UserClientTcp clientApi) : base(clientApi)
         {
-            response = new("battle", "/gameBattle/startGame/", "200");
+            response = new("auth", "/auth/setCurUser/", "200");
         }
 
         public override NetWorkSenderBase SetDate(object data)

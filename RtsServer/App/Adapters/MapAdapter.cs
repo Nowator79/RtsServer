@@ -7,7 +7,7 @@ namespace RtsServer.App.Adapters
     {
         public static FMap Get(Map map)
         {
-            FMap resMap = new FMap();
+            FMap resMap = new();
             resMap.Width = map.Width;
             resMap.Length = map.Length;
             resMap.Chunks = new();
@@ -22,7 +22,7 @@ namespace RtsServer.App.Adapters
         public static Map Get(FMap map)
         {
             Map resMap = new(map.Width, map.Length);
-
+            resMap.SetCode(map.Name);
             map.Chunks.ForEach(chunk =>
             {
                 resMap.Chunks.Add(new Buttle.MapButlle.ChunksType.ChunkBase(chunk.TypeId, chunk.Height));

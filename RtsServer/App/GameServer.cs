@@ -1,9 +1,7 @@
 ﻿using RtsServer.App.Buttle;
-using RtsServer.App.Buttle.MapButlle;
 using RtsServer.App.DataBase.Db;
 using RtsServer.App.NetWork.Tcp;
 using RtsServer.App.NetWorkHandlers;
-using RtsServer.App.ViewConsole;
 
 namespace RtsServer.App
 {
@@ -15,19 +13,19 @@ namespace RtsServer.App
         public DbUsers DbUsers { get; private set; }
         public ButtleManager ButtleManager { get; private set; }
         public List<Action> ActionsUpdate { get; }
-
+        private bool IsCancel { get; set; } = false;
         public GameServer(int port)
         {
             this.port = port;
 
             Router = new();
+            Router.SetContext(this);
+
             DbUsers = new();
             ButtleManager = new(this);
             ActionsUpdate = new();
 
-            Router.SetContext(this);
         }
-
 
         public void Run()
         {
@@ -38,53 +36,47 @@ namespace RtsServer.App
             TcpServer.Run();
 
 
-            ActionsUpdate.Add(checkPing);
-            ActionsUpdate.Add(() =>
-            {
-                Console.Clear();
-                List<UserClientTcp> userClients = TcpServer.GetUsers();
-                UserViewer.View(userClients);
-            });
+            ActionsUpdate.Add(CheckPing);
+            //ActionsUpdate.Add(() =>
+            //{
+            //    List<UserClientTcp> userClients = TcpServer.GetUsers();
+            //    UserViewer.View(userClients);
+            //});
 
-            ActionsUpdate.Add(() =>
-            {
-                ButtleManager.Games.ForEach(game =>
-                {
-                    GameViewer.ViewFullInfo(game);
-                    //MapViewer.View(game.Map);
-                });
-            });
+            //ActionsUpdate.Add(() =>
+            //{
+            //    ButtleManager.Games.ForEach(game =>
+            //    {
+            //        GameViewer.ViewFullInfo(game);
+            //    });
+            //});
 
-
-            Task.Run(Loop);
+            Thread thread = new(Loop);
+            thread.Start();
+            thread.Name = "GameServer";
         }
 
         private void Loop()
         {
-            while (true)
+            while (!IsCancel)
             {
                 Thread.Sleep(1000);
-
                 Update();
-
-                TcpServer.GetUsers().ForEach(user =>
-                {
-                    //MainResponse response = new("ping", "ping", "200");
-                    //user.Write(response);
-                });
-
             }
+
+            Console.Clear();
+            Console.WriteLine("Server stop");
         }
 
         private void Update()
         {
-            foreach (var action in ActionsUpdate)
+            foreach (Action action in ActionsUpdate)
             {
                 action();
             }
         }
 
-        private void checkPing()
+        private void CheckPing()
         {
             List<UserClientTcp> clients = TcpServer.GetUsers();
 
@@ -103,6 +95,12 @@ namespace RtsServer.App
 
             }
             disconectsList.Clear();
+        }
+
+        public void Cancel()
+        {
+            IsCancel = true;
+            TcpServer.Exit();
         }
     }
 }

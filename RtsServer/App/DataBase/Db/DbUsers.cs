@@ -5,7 +5,7 @@ namespace RtsServer.App.DataBase.Db
 {
     public class DbUsers
     {
-        private List<UserAuth> Users;
+        private List<UserAuth> Users { get; set; }
 
         public DbUsers()
         {

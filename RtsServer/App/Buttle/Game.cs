@@ -8,6 +8,7 @@ using RtsServer.App.NetWorkDto;
 using RtsServer.App.NetWorkDto.Response;
 using RtsServer.App.NetWorkResponseSender;
 using RtsServer.App.Tools;
+using RtsServer.App.ViewConsole;
 
 namespace RtsServer.App.Buttle
 {
@@ -62,7 +63,7 @@ namespace RtsServer.App.Buttle
 
                 if (userTcp != null)
                 {
-                    new StartGameSender(userTcp).SendMessage();
+                    new StartGameSender(userTcp).SetDate(new SetStartGameData(Map.Code, new Vector2Int())).SendMessage();
                 }
             }
 
@@ -123,6 +124,12 @@ namespace RtsServer.App.Buttle
             {
                 unit.MoveToTarget();
             });
+
+            if (ConfigGameServer.IsDebugGameUpdate)
+            {
+                GameViewer.ViewFullInfo(this);
+                Console.Clear();
+            }
         }
 
         public void End()
@@ -135,7 +142,7 @@ namespace RtsServer.App.Buttle
             while (IsPlay)
             {
                 Update();
-                Thread.Sleep(5);
+                Thread.Sleep(50);
             }
         }
     }

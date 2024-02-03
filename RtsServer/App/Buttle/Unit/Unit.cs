@@ -1,11 +1,12 @@
 ﻿using RtsServer.App.Buttle.Dto;
 using RtsServer.App.Buttle.Navigator;
+using RtsServer.App.Tools;
 
 namespace RtsServer.App.Buttle.Units
 {
     public class Unit
     {
-        private const int KRotationSpeed = 100000;
+        private const int KRotationSpeed = 200;
         public Unit(string xmlId, Health health, Vector2Float position)
         {
             Code = xmlId;
@@ -81,7 +82,12 @@ namespace RtsServer.App.Buttle.Units
                 // Поворачиваемся до цели если поворот правильный идем к цели
                 if (RotationToTarget(targetFloat))
                 {
-                    Vector2Float newPosition = Position + (targetFloat - Position).Normalize() * Speed * (float)Game.TimeSystem.GetDetlta() * 1000;
+                    double dTime = Game.TimeSystem.GetDetlta();
+                    Vector2Float newPosition = Position + (targetFloat - Position).Normalize() * Speed * dTime;
+                    if (Vector2Float.Distance(Position, newPosition) >= Vector2Float.Distance(Position, targetFloat))
+                    {
+                        newPosition = targetFloat;
+                    }
                     SetNewPosition(newPosition);
                 }
 
@@ -97,7 +103,8 @@ namespace RtsServer.App.Buttle.Units
             //typeAngle 1 = right
             //typeAngle -1 = left
 
-            double upAngle = RotationSpeed * Game.TimeSystem.GetDetlta() * KRotationSpeed;
+            double dTime = Game.TimeSystem.GetDetlta();
+            double upAngle = RotationSpeed *  KRotationSpeed * dTime;
             double newAngle = Rotation;
             if (upAngle > AngleToTarget) upAngle = AngleToTarget;
             if (typeAngle > 0)
@@ -109,6 +116,10 @@ namespace RtsServer.App.Buttle.Units
                 newAngle = Rotation - upAngle;
             }
 
+            if (Math.Abs(newAngle - Rotation) > 30)
+            {
+                Console.WriteLine("ERROR");
+            }
             Rotation = newAngle;
 
             if (AngleToTarget%180 < 5 || double.IsNaN(0 / AngleToTarget))

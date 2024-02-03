@@ -1,5 +1,6 @@
 ﻿using RtsServer.App.DataBase.Dto;
 using RtsServer.App.NetWorkHandlers;
+using RtsServer.App.NetWorkResponseSender;
 using System.Net;
 using System.Net.Sockets;
 
@@ -11,10 +12,10 @@ namespace RtsServer.App.NetWork.Tcp
     public abstract class Base : INetWorkServer
     {
         protected TcpListener tcpListener;
-        protected bool isStope = false;
         protected int port = 9080;
         protected MainProcessor processor;
         protected List<UserClientTcp> users;
+        protected CancellationTokenSource cancellationTokenSource;
 
         public List<UserClientTcp> GetUsers()
         {
@@ -29,66 +30,60 @@ namespace RtsServer.App.NetWork.Tcp
             tcpListener = new(IPAddress.Any, port);
 
             users = new();
-        }
-
-        public void Close()
-        {
-            isStope = true;
-            tcpListener.Stop();
+            cancellationTokenSource = new CancellationTokenSource();
         }
 
         private void ProcessClient(TcpClient tcpClient)
         {
             UserClientTcp client = new(tcpClient, this);
-            Task.Run(() => { client.Listen(); });
+            Thread clientListen = new(client.Listen)
+            {
+                Name = "Listener: user" + client.Id
+            };
+            clientListen.Start();
             users.Add(client);
         }
 
-        public UserClientTcp? GetClientById(string id)
+        public UserClientTcp? GetClientById(string id) => users.Find(n => n.Id == id);
+        public UserClientTcp? GetClientByUserAuth(UserAuth user) => users.Find(n => n.User == user);
+        public void Run()
         {
-            return users.Find(n => n.Id == id);
-        }
-        public UserClientTcp? GetClientByUserAuth(UserAuth user)
-        {
-            return users.Find(n => n.User == user);
-        }
-
-        public async void Run()
-        {
-            try
+            cancellationTokenSource.Token.Register(() => tcpListener.Stop());
+            tcpListener.Start();
+            Task.Run(async () =>
             {
-                tcpListener.Start();
-                Console.WriteLine("Сервер запущен. Ожидание подключений... ");
-
-                while (true)
+                try
                 {
-                    TcpClient tcpClient = await tcpListener.AcceptTcpClientAsync();
+                    Console.WriteLine("Сервер запущен. Ожидание подключений... ");
 
-                    ProcessClient(tcpClient);
+                    while (true)
+                    {
+                        TcpClient tcpClient = await Task.Run(
+                            tcpListener.AcceptTcpClientAsync,
+                            cancellationTokenSource.Token);
 
-                    if (isStope) break;
+                        ProcessClient(tcpClient);
 
+                    }
                 }
-            }
-            finally
-            {
-                tcpListener.Stop();
-            }
+                finally
+                {
+                    tcpListener.Stop();
+                    Console.WriteLine("Tcp Server is stoped");
+                }
+            });
+           
         }
-
         public void DisconectUser(UserClientTcp userClient)
         {
+
             users.Remove(userClient);
         }
-
         public void Exit()
         {
-            throw new NotImplementedException();
+            tcpListener.Stop();
+            cancellationTokenSource.Cancel();
         }
-
-        public MainProcessor GetProcessor()
-        {
-            return processor;
-        }
+        public MainProcessor GetProcessor() => processor;
     }
 }

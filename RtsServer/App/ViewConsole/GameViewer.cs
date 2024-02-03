@@ -23,16 +23,19 @@ namespace RtsServer.App.ViewConsole
 
         public static void ViewFullInfo(Game game)
         {
-            Console.WriteLine($"Game ID: {game.Id}, TimeCreated: {new DateTime(game.createDateTime).ToLongTimeString()} TimeButtle: {new DateTime(DateTime.Now.Ticks - game.createDateTime).ToLongTimeString()}");
-            Console.WriteLine($"{"Id",20} | {"XmlCode",20} | {"Health",10} |  {"Position",10} |");
-
-            foreach (Buttle.Units.Unit unit in game.Units)
+            if (ConfigGameServer.IsDebugGameUsersInfoUpdate)
             {
-                Console.WriteLine(new StringBuilder().Insert(0, "-", 72).ToString());
-                Console.Write($"{unit.Id,20} | {unit.Code,20} | {HealhtViewer.GetStringView(unit.Health),10} |  {VectorViewer.GetStringView(unit.Position),10} |");
-                Console.WriteLine();
+                Console.WriteLine($"Game ID: {game.Id}, TimeCreated: {new DateTime(game.createDateTime).ToLongTimeString()} TimeButtle: {new DateTime(DateTime.Now.Ticks - game.createDateTime).ToLongTimeString()}");
+                Console.WriteLine($"{"Id",20} | {"XmlCode",20} | {"Health",10} |  {"Position",10} |");
+
+                foreach (Buttle.Units.Unit unit in game.Units)
+                {
+                    Console.WriteLine(new StringBuilder().Insert(0, "-", 72).ToString());
+                    Console.Write($"{unit.Id,20} | {unit.Code,20} | {HealhtViewer.GetStringView(unit.Health),10} |  {VectorViewer.GetStringView(unit.Position),10} |");
+                    Console.WriteLine();
+                }
+                Console.WriteLine(new StringBuilder().Insert(0, "=", 72).ToString());
             }
-            Console.WriteLine(new StringBuilder().Insert(0, "=", 72).ToString());
 
             char[,] viewConsoleArray = new char[game.Map.Width, game.Map.Length];
             for (int x = 0; x < game.Map.Width; x++)
@@ -41,7 +44,6 @@ namespace RtsServer.App.ViewConsole
                 {
                     viewConsoleArray[x, y] = game.Map.Chunks[x * game.Map.Length + y].Height == 1 ? '=' : '~';
                 }
-                Console.WriteLine();
             }
 
             game.Units.ForEach(unit =>
@@ -61,10 +63,6 @@ namespace RtsServer.App.ViewConsole
                 }
                 Console.WriteLine();
             }
-
-
-          
-
         }
     }
 }

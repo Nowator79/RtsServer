@@ -1,7 +1,7 @@
 using RtsServer.App.Buttle.Dto;
 using RtsServer.App.NetWorkDto.Response;
 
-public class SetTargetUnits : IResponse
+public class SetTargetUnits
 {
     public List<int> UnitsIds { get; set; }
     public Vector2Int Target { get; set; }

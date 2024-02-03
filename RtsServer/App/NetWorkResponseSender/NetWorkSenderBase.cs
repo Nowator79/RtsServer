@@ -14,7 +14,7 @@ namespace RtsServer.App.NetWorkResponseSender
             response = new("base", "/base/", "200");
         }
 
-        public virtual NetWorkSenderBase SetDate(IResponse data)
+        public virtual NetWorkSenderBase SetDate(object data)
         {
             response.SetBody(data);
             return this;

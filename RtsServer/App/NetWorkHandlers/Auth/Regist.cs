@@ -14,15 +14,13 @@ namespace RtsServer.App.NetWorkHandlers.Auth
             NUser? userAuth = response.GetBody<NUser>();
             if (userAuth != null)
             {
-                using (ApplicationContext db = new())
-                {
-                    UserAuth? userFind = db.Users.FirstOrDefault(e => e.UserName == userAuth.Value.UserName);
+                using ApplicationContext db = new();
+                UserAuth? userFind = db.Users.FirstOrDefault(e => e.UserName == userAuth.Value.UserName);
 
-                    if (userFind != null) return;
+                if (userFind != null) return;
 
-                    db.Users.AddRange(UserAdapter.Get(userAuth.Value));
-                    db.SaveChanges();
-                }
+                db.Users.AddRange(UserAdapter.Get(userAuth.Value));
+                db.SaveChanges();
             }
         }
     }

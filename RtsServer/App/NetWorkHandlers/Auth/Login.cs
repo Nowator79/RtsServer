@@ -3,6 +3,7 @@ using RtsServer.App.DataBase.Dto;
 using RtsServer.App.NetWork.Tcp;
 using RtsServer.App.NetWorkDto;
 using RtsServer.App.NetWorkDto.Response;
+using RtsServer.App.NetWorkResponseSender;
 
 namespace RtsServer.App.NetWorkHandlers.Auth
 {
@@ -22,6 +23,9 @@ namespace RtsServer.App.NetWorkHandlers.Auth
 
                 AUser.Status.SetInPassive();
                 clientTcp.SetUser(AUser);
+
+                new CurUserDataSender(clientTcp).SetDate(Adapters.UserAdapter.Get(clientTcp.User)).SendMessage();
+
                 Console.WriteLine($"Клиент {clientTcp.Id} авторизовался под {clientTcp.User.UserName}");
             }
         }

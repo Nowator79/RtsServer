@@ -51,25 +51,25 @@ namespace RtsServer.App.Buttle.Navigator
             _isProcessPoints.Add(point);
 
             _mapChunks[point.X, point.Y].StepsCount = step;
-            HashSet<NavChunk> chunksTmp = NavHelper.GetNavChunksByPoints(
+            HashSet<NavChunk> chunksNearTmp = NavHelper.GetNavChunksByPoints(
                 NavHelper.GetSafeNear(point, _map.Width, _map.Length), _mapChunks
                 ).ToHashSet();
 
             HashSet<NavChunk> forRemoveChunks = new();
-            foreach (NavChunk item in chunksTmp)
+            foreach (NavChunk pointNear in chunksNearTmp)
             {
-                if (!NavHelper.CanMove(_mapChunks[point.X, point.Y], item))
+                if (!NavHelper.CanMove(_mapChunks[point.X, point.Y], pointNear))
                 {
-                    forRemoveChunks.Add(item);
+                    forRemoveChunks.Add(pointNear);
                 }
             }
 
             foreach (NavChunk item in forRemoveChunks)
             {
-                chunksTmp.Remove(item);
+                chunksNearTmp.Remove(item);
             }
 
-            NavChunk[] nearChunks = NavHelper.GetSortByDistanceChunk(chunksTmp.ToArray());
+            NavChunk[] nearChunks = NavHelper.GetSortByDistanceChunk(chunksNearTmp.ToArray());
 
             foreach (NavChunk nearPoint in nearChunks)
             {
@@ -83,6 +83,7 @@ namespace RtsServer.App.Buttle.Navigator
 
         private void ReversProcessChunk(NavChunk chunk)
         {
+
             HashSet<NavChunk> chunksTmp = NavHelper.GetNavChunksByPoints(
              NavHelper.GetSafeNear(chunk.Position, _map.Width, _map.Length), _mapChunks
              ).ToHashSet();
@@ -139,90 +140,89 @@ namespace RtsServer.App.Buttle.Navigator
             // рекурсивынй обратный поиск пути
             routeNavigation.Add(_endPoint);
             ReversProcessChunk(_mapChunks[_endPoint.X, _endPoint.Y]);
-
-            return;
-            Console.Clear();
-            Console.WriteLine("StepsCount:");
-            Console.Write($"[ {"x",3} ] ");
-            for (int y = 0; y < _map.Length; y++)
+            if (ConfigGameServer.IsDebugGameNavUpdate)
             {
-                Console.Write($"[ {y,3} ] ");
-            }
-            Console.WriteLine();
-
-            for (int x = 0; x < _map.Width; x++)
-            {
-                Console.Write($"[ {x,3} ] ");
-
+                const int countN = 4;
+                Console.Clear();
+                Console.WriteLine("StepsCount:");
+                Console.Write($"[{"x",countN}]");
                 for (int y = 0; y < _map.Length; y++)
                 {
-                    Console.Write($"[ {_mapChunks[x, y].StepsCount,3} ] ");
+                    Console.Write($"[{y,countN}]");
                 }
                 Console.WriteLine();
-            }
-            Console.WriteLine();
 
-            Console.WriteLine("Height:");
-            Console.Write($"[ {"x",3} ] ");
-            for (int y = 0; y < _map.Length; y++)
-            {
-                Console.Write($"[ {y,3} ] ");
-            }
-            Console.WriteLine();
-
-            for (int x = 0; x < _map.Width; x++)
-            {
-                Console.Write($"[ {x,3} ] ");
-
-                for (int y = 0; y < _map.Length; y++)
+                for (int x = 0; x < _map.Width; x++)
                 {
-                    Console.Write($"[ {_mapChunks[x, y].Height,3} ] ");
-                }
-                Console.WriteLine();
-            }
-            Console.WriteLine();
+                    Console.Write($"[{x,countN}]");
 
-            Console.WriteLine("TargetRange:");
-            Console.Write($"[ {"x",3} ] ");
-            for (int y = 0; y < _map.Length; y++)
-            {
-                Console.Write($"[ {y,3} ] ");
-            }
-            Console.WriteLine();
-            for (int x = 0; x < _map.Width; x++)
-            {
-                Console.Write($"[ {x,3} ] ");
-
-                for (int y = 0; y < _map.Length; y++)
-                {
-                    Console.Write($"[ {_mapChunks[x, y].TargetRange,3} ] ");
-                }
-                Console.WriteLine();
-            }
-            Console.WriteLine();
-
-
-
-        
-            for (int x = 0; x < _map.Width; x++)
-            {
-                for (int y = 0; y < _map.Length; y++)
-                {
-                    string t = " ";
-                    if (routeNavigation.Contains(_mapChunks[x, y].Position))
+                    for (int y = 0; y < _map.Length; y++)
                     {
-                        t = "x";
-
+                        Console.Write($"[{_mapChunks[x, y].StepsCount,countN}]");
                     }
-                    else
+                    Console.WriteLine();
+                }
+                Console.WriteLine();
+
+                Console.WriteLine("Height:");
+                Console.Write($"[{"x",countN}] ");
+                for (int y = 0; y < _map.Length; y++)
+                {
+                    Console.Write($"[{y,countN}]");
+                }
+                Console.WriteLine();
+
+                for (int x = 0; x < _map.Width; x++)
+                {
+                    Console.Write($"[{x,countN}] ");
+
+                    for (int y = 0; y < _map.Length; y++)
                     {
-
+                        Console.Write($"[{_mapChunks[x, y].Height,countN} ]");
                     }
-                    Console.Write($"[{t}] ");
+                    Console.WriteLine();
+                }
+                Console.WriteLine();
+
+                Console.WriteLine("TargetRange:");
+                Console.Write($"[{"x",countN}]");
+                for (int y = 0; y < _map.Length; y++)
+                {
+                    Console.Write($"[{y,countN}]");
+                }
+                Console.WriteLine();
+                for (int x = 0; x < _map.Width; x++)
+                {
+                    Console.Write($"[{x,countN}]");
+
+                    for (int y = 0; y < _map.Length; y++)
+                    {
+                        Console.Write($"[{_mapChunks[x, y].TargetRange,countN}]");
+                    }
+                    Console.WriteLine();
+                }
+                Console.WriteLine();
+
+                for (int x = 0; x < _map.Width; x++)
+                {
+                    for (int y = 0; y < _map.Length; y++)
+                    {
+                        string t = " ";
+                        if (routeNavigation.Contains(_mapChunks[x, y].Position))
+                        {
+                            t = "x";
+
+                        }
+                        else
+                        {
+
+                        }
+                        Console.Write($"[{t}]");
+                    }
+                    Console.WriteLine();
                 }
                 Console.WriteLine();
             }
-            Console.WriteLine();
 
         }
 

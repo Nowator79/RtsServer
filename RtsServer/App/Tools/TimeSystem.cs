@@ -4,7 +4,7 @@ namespace RtsServer.App.Tools
 {
     public class TimeSystem
     {
-        private double LastUpdate { get; set; }
+        private DateTime LastUpdate { get; set; }
         public TimeSystem()
         {
             Update();
@@ -12,12 +12,13 @@ namespace RtsServer.App.Tools
 
         public void Update()
         {
-            LastUpdate = DateTime.Now.Ticks;
+            LastUpdate = DateTime.Now;
         }
 
         public double GetDetlta()
         {
-            return new TimeSpan((long)(DateTime.Now.Ticks - LastUpdate)).TotalSeconds;
+            TimeSpan interval = DateTime.Now - LastUpdate;
+            return (double)interval.Ticks / (double)1000;
         }
     }
 }

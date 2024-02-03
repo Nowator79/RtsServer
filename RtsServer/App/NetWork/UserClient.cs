@@ -22,6 +22,7 @@ namespace RtsServer.App.NetWork.Tcp
         public int CountRead { get; private set; } = 0;
 
         public UserAuth User { get; private set; }
+        protected bool _isDisconect { get; set; } = false;
 
         public void SetUser(UserAuth User)
         {
@@ -65,6 +66,7 @@ namespace RtsServer.App.NetWork.Tcp
         public void Disconect()
         {
             Console.WriteLine($"Клиент {Id} отключился");
+            _isDisconect = true;
             server.DisconectUser(this);
         }
 
@@ -76,31 +78,46 @@ namespace RtsServer.App.NetWork.Tcp
             MainResponse? mainResponse;
             CountRead++;
             int bytesRead;
-            while (true)
+
+            while (!_isDisconect)
             {
-                if (Stream.CanRead)
+                if (Stream.CanRead && !_isDisconect)
                 {
-                    while ((bytesRead = Stream.ReadByte()) != '\n')
+                    while ((bytesRead = Stream.ReadByte()) != '\n' && !_isDisconect)
                     {
                         r = r.Append((byte)bytesRead).ToArray();
                         response.Add((byte)bytesRead);
+                    }
+                    if (_isDisconect)
+                    {
+                        throw new Exception("Выход из чтения");
                     }
                     string word = Encoding.UTF8.GetString(response.ToArray());
                     Stream.Flush();
 
                     mainResponse = JsonSerializer.Deserialize<MainResponse>(word);
+
+                    if (ConfigGameServer.IsDebugNetWork)
+                    {
+                        Console.WriteLine($"Get {word}");
+                    }
+
                     //return new MainResponse("getMap", "/gameBattle/get/", "200");
                     if (mainResponse == null) throw new Exception("Ответ не в JSON");
                     return mainResponse;
                 }
                 Thread.Sleep(100);
             }
-
+            throw new Exception("Выход из чтения");
         }
-        
+
         public async void Write(MainResponse response)
         {
             string request = JsonSerializer.Serialize(response);
+            if (ConfigGameServer.IsDebugNetWork)
+            {
+                Console.WriteLine($"Send {request}");
+            }
             request += '\n';
             await Stream.WriteAsync(Encoding.UTF8.GetBytes(request));
             CountWrite++;
@@ -114,8 +131,8 @@ namespace RtsServer.App.NetWork.Tcp
         public bool IsConnectPing()
         {
             double timeDef = (new TimeSpan(LastPing)).TotalSeconds - (new TimeSpan(DateTime.Now.Ticks)).TotalSeconds;
-            Console.WriteLine(timeDef);
             return timeDef > -5;
         }
+
     }
 }

@@ -9,6 +9,7 @@ namespace RtsServer.App.Buttle.MapButlle
         public ChunkBase[,] ChunksProcessed { get; set; }
         public int Width { get; private set; }
         public int Length { get; private set; }
+        public string Code { get; private set; }
 
         public Map(int width, int height)
         {
@@ -16,6 +17,11 @@ namespace RtsServer.App.Buttle.MapButlle
             Length = height;
 
             Chunks = new();
+        }
+
+        public void SetCode(string Code)
+        {
+            this.Code = Code;
         }
 
         public ChunkBase[,] GetArrayMap()
