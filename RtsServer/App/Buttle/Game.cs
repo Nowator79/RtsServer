@@ -128,7 +128,7 @@ namespace RtsServer.App.Buttle
             if (ConfigGameServer.IsDebugGameUpdate)
             {
                 GameViewer.ViewFullInfo(this);
-                Console.Clear();
+                 if(ConfigGameServer.IsEnabledClearConsole) Console.Clear();
             }
         }
 

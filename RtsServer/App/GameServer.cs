@@ -64,7 +64,7 @@ namespace RtsServer.App
                 Update();
             }
 
-            Console.Clear();
+             if(ConfigGameServer.IsEnabledClearConsole) Console.Clear();
             Console.WriteLine("Server stop");
         }
 

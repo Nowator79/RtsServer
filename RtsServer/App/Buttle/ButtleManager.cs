@@ -119,7 +119,7 @@ namespace RtsServer.App.Buttle
 
             Unit soldier = new Soldier(new Dto.Vector2Float());
             soldier.SetGame(game);
-            soldier.SetTargetPosition(new Dto.Vector2Int(1, 9));
+            soldier.SetTargetPosition(new Dto.Vector2Int(45, 45));
             game.AddUnit(soldier);
 
             game.Start();

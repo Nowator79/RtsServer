@@ -1,7 +1,6 @@
 ﻿using RtsServer.App.Buttle.Dto;
 using RtsServer.App.Buttle.MapButlle;
 using RtsServer.App.Buttle.MapButlle.ChunksType;
-using System.Drawing;
 
 namespace RtsServer.App.Buttle.Navigator
 {
@@ -18,6 +17,9 @@ namespace RtsServer.App.Buttle.Navigator
         private HashSet<Vector2Int> _isCheckPoints;
         private HashSet<Vector2Int> _isProcessPoints;
 
+        private HashSet<Vector2Int> _pollCurPoints;
+        private HashSet<Vector2Int> _pollNextPoints;
+
 
         public NavWave(
             Map map,
@@ -27,6 +29,10 @@ namespace RtsServer.App.Buttle.Navigator
         {
             _isCheckPoints = new();
             _isProcessPoints = new();
+
+            _pollCurPoints = new();
+            _pollNextPoints = new();
+
             _map = map;
             NavChunk[,] chunks = new NavChunk[map.Width, map.Length];
 
@@ -46,39 +52,36 @@ namespace RtsServer.App.Buttle.Navigator
         }
 
 
-        private void ProcessChunk(Vector2Int point, int step = 0)
+        private void ProcessChunk(Vector2Int curPoint, int step = 0)
         {
-            _isProcessPoints.Add(point);
+            if (_isProcessPoints.Contains(curPoint)) return;
+            _isProcessPoints.Add(curPoint);
 
-            _mapChunks[point.X, point.Y].StepsCount = step;
-            HashSet<NavChunk> chunksNearTmp = NavHelper.GetNavChunksByPoints(
-                NavHelper.GetSafeNear(point, _map.Width, _map.Length), _mapChunks
+            _mapChunks[curPoint.X, curPoint.Y].StepsCount = step;
+
+            HashSet<NavChunk> nearChuks = NavHelper.GetNavChunksByPoints(
+                NavHelper.GetSafeNear(curPoint, _map.Width, _map.Length), _mapChunks
                 ).ToHashSet();
 
             HashSet<NavChunk> forRemoveChunks = new();
-            foreach (NavChunk pointNear in chunksNearTmp)
+            foreach (NavChunk nearChunk in nearChuks)
             {
-                if (!NavHelper.CanMove(_mapChunks[point.X, point.Y], pointNear))
+                if (!NavHelper.CanMove(_mapChunks[curPoint.X, curPoint.Y], nearChunk))
                 {
-                    forRemoveChunks.Add(pointNear);
+                    forRemoveChunks.Add(nearChunk);
                 }
             }
 
             foreach (NavChunk item in forRemoveChunks)
             {
-                chunksNearTmp.Remove(item);
+                nearChuks.Remove(item);
             }
 
-            NavChunk[] nearChunks = NavHelper.GetSortByDistanceChunk(chunksNearTmp.ToArray());
-
-            foreach (NavChunk nearPoint in nearChunks)
+            NavChunk[] nearChunks = NavHelper.GetSortByDistanceChunk(nearChuks.ToArray());
+            foreach (NavChunk nearChunk in nearChunks)
             {
-                if (!_isProcessPoints.Contains(nearPoint.Position))
-                {
-                    ProcessChunk(nearPoint.Position, ++step);
-                }
+                _pollNextPoints.Add(nearChunk.Position);
             }
-
         }
 
         private void ReversProcessChunk(NavChunk chunk)
@@ -135,7 +138,23 @@ namespace RtsServer.App.Buttle.Navigator
             }
 
             // рекурсивный анализ карты
-            ProcessChunk(new Vector2Int(_startPoint.X, _startPoint.Y));
+            Vector2Int startPoint = new Vector2Int(_startPoint.X, _startPoint.Y);
+            int step = 0;
+            _pollCurPoints.Add(startPoint);
+            while (_pollCurPoints.Count > 0)
+            {
+                foreach (Vector2Int curPoint in _pollCurPoints)
+                {
+                    ProcessChunk(curPoint, step);
+                }
+                _pollCurPoints.Clear();
+                foreach (Vector2Int nextPoint in _pollNextPoints)
+                {
+                    _pollCurPoints.Add(nextPoint);
+                }
+                _pollNextPoints.Clear();
+                step++;
+            }
 
             // рекурсивынй обратный поиск пути
             routeNavigation.Add(_endPoint);
@@ -143,7 +162,7 @@ namespace RtsServer.App.Buttle.Navigator
             if (ConfigGameServer.IsDebugGameNavUpdate)
             {
                 const int countN = 4;
-                Console.Clear();
+                if(ConfigGameServer.IsEnabledClearConsole) Console.Clear();
                 Console.WriteLine("StepsCount:");
                 Console.Write($"[{"x",countN}]");
                 for (int y = 0; y < _map.Length; y++)
