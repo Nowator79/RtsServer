@@ -44,13 +44,40 @@ namespace RtsServer.App.Buttle.Navigator
                 );
             return chunksTmp.ToArray();
         }
-        public static NavChunk[] GetSortForReverseChunk(NavChunk[] chunks)
+        public static NavChunk GetSortForReverseChunk(NavChunk[] chunks, int X, int Y)
         {
             List<NavChunk> chunksTmp = new(chunks);
-            chunksTmp.Sort(
+            List<NavChunk> chunksTmpX = new();
+            List<NavChunk> chunksTmpP = new();
+            List<NavChunk> result = new();
+            chunksTmp.ForEach(chunk =>
+            {
+                if (
+                    (chunk.Position.X == X && chunk.Position.Y != Y) ||
+                    (chunk.Position.X != X && chunk.Position.Y == Y)
+                )
+                {
+                    chunksTmpP.Add(chunk);
+                }
+                else
+                {
+                    chunksTmpX.Add(chunk);
+                }
+            });
+            chunksTmpP.Sort(
                 (x, y) => x.StepsCount.CompareTo(y.StepsCount)
                 );
-            return chunksTmp.ToArray();
+            chunksTmpX.Sort(
+                (x, y) => x.StepsCount.CompareTo(y.StepsCount)
+                );
+            NavChunk p = chunksTmpP.First();
+            NavChunk x = chunksTmpX.First();
+            if (x.StepsCount < p.StepsCount)
+            {
+                return x;
+            }
+
+            return p;
         }
 
         public static NavChunk[] GetNavChunksByPoints(Vector2Int[] points, NavChunk[,] chunks)
