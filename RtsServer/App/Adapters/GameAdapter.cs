@@ -9,13 +9,19 @@ namespace RtsServer.App.Adapters
         {
             List<NUser> NUsers = new();
             List<NUnit> NUnits = new();
+            List<NConstruction> NConstructions = new();
 
             foreach (Buttle.Units.Unit unit in game.Units)
             {
                 NUnits.Add(UnitAdapter.Get(unit));
             }
 
-            return new NGame(NUnits);
+            foreach (Buttle.Constructions.Construction construction in game.Constructions)
+            {
+                NConstructions.Add(ConstructionAdapter.Get(construction));
+            }
+
+            return new NGame(NUnits, NConstructions);
         }
     }
 }

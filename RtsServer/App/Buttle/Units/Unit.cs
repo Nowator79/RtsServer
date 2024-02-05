@@ -1,17 +1,26 @@
 ﻿using RtsServer.App.Buttle.Dto;
 using RtsServer.App.Buttle.Navigator;
-using RtsServer.App.Tools;
 
 namespace RtsServer.App.Buttle.Units
 {
     public class Unit
     {
-        private const int KRotationSpeed = 200;
+        protected const int KRotationSpeed = 50;
         public Unit(string xmlId, Health health, Vector2Float position)
         {
             Code = xmlId;
             Health = health;
             Position = position;
+            Navigatior = new GroundUnitNavigator();
+            Navigatior.SetUnit(this);
+            Rotation = 0;
+        }
+
+        public Unit(string xmlId, Health health, Vector2Int position)
+        {
+            Code = xmlId;
+            Health = health;
+            Position = position.GetFloat();
             Navigatior = new GroundUnitNavigator();
             Navigatior.SetUnit(this);
             Rotation = 0;
@@ -100,8 +109,6 @@ namespace RtsServer.App.Buttle.Units
             Vector2Float GFactingC = Vector2Float.VectorByAngle(-Rotation); // локальная точка
             double AngleToTarget = Vector2Float.AngleByVectorsAndRot(Position, GFactingC.Normalize(), Target);
             double typeAngle = Vector2Float.SideByVector(Position, GFacting, Target);
-            //typeAngle 1 = right
-            //typeAngle -1 = left
 
             double dTime = Game.TimeSystem.GetDetlta();
             double upAngle = RotationSpeed *  KRotationSpeed * dTime;
@@ -130,9 +137,6 @@ namespace RtsServer.App.Buttle.Units
             {
                 return false;
             }
-            //Vector2Float HPosition = new(457, 889);
-            //Console.WriteLine(Vector2Float.AngleByVectorsAndRot(G, GFacting, HPosition));
-            //Console.WriteLine(Vector2Float.SideByVector(G, GFacting, HPosition));
         }
 
         /// Идентификаторы 

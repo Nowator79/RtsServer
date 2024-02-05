@@ -1,4 +1,5 @@
 ﻿using RtsServer.App.Adapters;
+using RtsServer.App.Buttle.Constructions;
 using RtsServer.App.Buttle.Dto;
 using RtsServer.App.Buttle.MapButlle;
 using RtsServer.App.Buttle.Navigator;
@@ -15,36 +16,34 @@ namespace RtsServer.App.Buttle
     public class Game
     {
         public int Id { get; set; }
-        public long createDateTime { get; private set; }
+        public long CreateDateTime { get; private set; }
         public Map Map { get; private set; }
         public List<Player> Players { get; set; } = new List<Player> { };
-        public List<Unit> Units { get; set; } = new List<Unit>();
+        public List<Unit> Units { get; set; } = new();
+        public List<Construction> Constructions { get; set; } = new();
+        public ButtleManager ButtleManager { get; private set; }
+        public TimeSystem TimeSystem { get; private set; }
         public List<Action> ActionsUpdate { private get; set; } = new();
-        public ButtleManager buttleManager { get; private set; }
 
-        private GroundUnitNavigator gNav;
+        private readonly GroundUnitNavigator gNav;
 
         private bool IsPlay = false;
-        private Random _random;
-        public TimeSystem TimeSystem { get; private set; }
 
         public Game(int Id, ButtleManager buttleManager)
         {
             this.Id = Id;
-            this.buttleManager = buttleManager;
-            createDateTime = DateTime.Now.Ticks;
+            ButtleManager = buttleManager;
+            CreateDateTime = DateTime.Now.Ticks;
             TimeSystem = new();
-
             gNav = new();
         }
 
         public Game SetMap(Map map)
         {
-            this.Map = map;
+            Map = map;
             gNav.SetMap(map);
             return this;
         }
-
 
         public void Start()
         {
@@ -53,13 +52,12 @@ namespace RtsServer.App.Buttle
                 throw new Exception("Не задан Map");
             }
 
-            _random = new Random();
 
             IsPlay = true;
 
             foreach (Player player in Players)
             {
-                UserClientTcp? userTcp = buttleManager.GameServer.TcpServer.GetClientByUserAuth(player.UserAuth);
+                UserClientTcp? userTcp = ButtleManager.GameServer.TcpServer.GetClientByUserAuth(player.UserAuth);
 
                 if (userTcp != null)
                 {
@@ -80,7 +78,7 @@ namespace RtsServer.App.Buttle
         {
             foreach (Player player in Players)
             {
-                UserClientTcp? userTcp = buttleManager.GameServer.TcpServer.GetClientByUserAuth(player.UserAuth);
+                UserClientTcp? userTcp = ButtleManager.GameServer.TcpServer.GetClientByUserAuth(player.UserAuth);
 
                 if (userTcp != null)
                 {
@@ -106,10 +104,18 @@ namespace RtsServer.App.Buttle
          * внешние системы не отвечают 
          * за создание юнитов в контексте игры
          */
+        private int UnitNextId = 0;
         public void AddUnit(Unit unit)
         {
-            unit.SetId(Units.Count);
+            unit.SetId(UnitNextId++);
             Units.Add(unit);
+        }
+
+        private int ConstructionNextId = 0;
+        public void AddConstruction(Construction construction)
+        {
+            construction.SetId(ConstructionNextId++);
+            Constructions.Add(construction);
         }
 
         public void Update()
@@ -128,7 +134,7 @@ namespace RtsServer.App.Buttle
             if (ConfigGameServer.IsDebugGameUpdate)
             {
                 GameViewer.ViewFullInfo(this);
-                 if(ConfigGameServer.IsEnabledClearConsole) Console.Clear();
+                if (ConfigGameServer.IsEnabledClearConsole) Console.Clear();
             }
         }
 

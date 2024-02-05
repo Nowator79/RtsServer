@@ -109,8 +109,6 @@ namespace RtsServer.App.Buttle.Navigator
 
         public void Run()
         {
-            // OpenStartPoint
-
             for (int x = 0; x < _map.Width; x++)
             {
                 for (int y = 0; y < _map.Length; y++)

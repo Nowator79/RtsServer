@@ -8,7 +8,7 @@ namespace RtsServer.App.ViewConsole
     {
         public static void View(Game game)
         {
-            Console.WriteLine($"Game ID: {game.Id}, TimeCreated: {new DateTime(game.createDateTime).ToLongTimeString()} TimeButtle: {new DateTime(DateTime.Now.Ticks - game.createDateTime).ToLongTimeString()}");
+            Console.WriteLine($"Game ID: {game.Id}, TimeCreated: {new DateTime(game.CreateDateTime).ToLongTimeString()} TimeButtle: {new DateTime(DateTime.Now.Ticks - game.CreateDateTime).ToLongTimeString()}");
             Console.WriteLine($"{"Id",20} | {"XmlCode",20} | {"Health",10} |  {"Position",10} |");
 
             foreach (Buttle.Units.Unit unit in game.Units)
@@ -25,7 +25,7 @@ namespace RtsServer.App.ViewConsole
         {
             if (ConfigGameServer.IsDebugGameUsersInfoUpdate)
             {
-                Console.WriteLine($"Game ID: {game.Id}, TimeCreated: {new DateTime(game.createDateTime).ToLongTimeString()} TimeButtle: {new DateTime(DateTime.Now.Ticks - game.createDateTime).ToLongTimeString()}");
+                Console.WriteLine($"Game ID: {game.Id}, TimeCreated: {new DateTime(game.CreateDateTime).ToLongTimeString()} TimeButtle: {new DateTime(DateTime.Now.Ticks - game.CreateDateTime).ToLongTimeString()}");
                 Console.WriteLine($"{"Id",20} | {"XmlCode",20} | {"Health",10} |  {"Position",10} |");
 
                 foreach (Buttle.Units.Unit unit in game.Units)

@@ -1,10 +1,7 @@
-﻿
-using RtsServer.App.Adapters;
+﻿using RtsServer.App.Buttle.Constructions;
+using RtsServer.App.Buttle.MapButtle;
 using RtsServer.App.Buttle.Units;
 using RtsServer.App.DataBase.Dto;
-using RtsServer.App.FileSystem;
-using RtsServer.App.FileSystem.Dto;
-using RtsServer.App.ViewConsole;
 
 namespace RtsServer.App.Buttle
 {
@@ -13,8 +10,10 @@ namespace RtsServer.App.Buttle
         public List<Game> Games { get; private set; }
         public HashSet<UserAuth> UsersForSearching { get; private set; }
         public GameServer GameServer { get; private set; }
-        public MapFileManager MapFileManager { get; private set; }
-        private readonly string[] MapsForPvp = { "sad", "test" };
+        public MapSceneFactory MapSceneFactory { get; private set; }
+        public Dictionary<string, MapScene> MapScene { get; private set; }
+
+        private readonly string[] MapsForPvp = { "test" };
         private readonly Random rnd = new();
 
         public ButtleManager(GameServer gameServer)
@@ -22,7 +21,9 @@ namespace RtsServer.App.Buttle
             GameServer = gameServer;
             Games = new();
             UsersForSearching = new();
-            MapFileManager = new();
+            MapSceneFactory = new();
+            MapScene = new();
+
             if (ConfigGameServer.IsDebugStartGame)
             {
                 StartSingleGame();
@@ -65,7 +66,7 @@ namespace RtsServer.App.Buttle
                 game.AddUnit(soldier);
 
                 game
-                    .SetMap(MapAdapter.Get(MapFileManager.LoadMapByName("sad")))
+                //    .SetMap(MapAdapter.Get(MapSceneFactory.LoadMapByName("sad")))
                     .Start();
 
                 AddGame(game);
@@ -90,14 +91,23 @@ namespace RtsServer.App.Buttle
 
                 Game game = new(Games.Count, this);
                 string nameMap = MapsForPvp[rnd.Next(0, MapsForPvp.Length)];
-                //game.SetMap(MapAdapter.Get(mapFileManager.LoadMapByName(nameMap)));
-                game.SetMap(MapAdapter.Get(MapFileManager.LoadMapByName("test")));
+                List<MapScene> mapScenes = new(MapSceneFactory.GetAllMapScene());
+                MapScene? mapScene = mapScenes.Find(mapScene => mapScene.Map.Code == nameMap);
+                if (mapScene == null) throw new Exception("Не найдена нужная карта");
+                game.SetMap(mapScene.Map);
                 game.Players.Add(new Player(firstUser));
 
-                Unit soldier = new Soldier(new Dto.Vector2Float());
-                soldier.SetGame(game);
-                soldier.SetTargetPosition(new Dto.Vector2Int(1, 9));
-                game.AddUnit(soldier);
+                foreach (Unit unit in mapScene.Units)
+                {
+                    unit.SetGame(game);
+                    game.AddUnit(unit);
+                }
+
+                foreach (Construction construction in mapScene.ConstructionAdditionalsForMap)
+                {
+                    construction.SetGame(game);
+                    game.AddConstruction(construction);
+                }
 
                 game.Start();
 
@@ -115,12 +125,16 @@ namespace RtsServer.App.Buttle
         public int StartSingleGame()
         {
             Game game = new(Games.Count, this);
-            game.SetMap(MapAdapter.Get(MapFileManager.LoadMapByName("test")));
+            //game.SetMap(MapAdapter.Get(MapSceneFactory.LoadMapByName("test")));
 
             Unit soldier = new Soldier(new Dto.Vector2Float());
             soldier.SetGame(game);
             soldier.SetTargetPosition(new Dto.Vector2Int(45, 45));
             game.AddUnit(soldier);
+
+            Unit tank = new TankT1(new Dto.Vector2Float(4, 4));
+            tank.SetGame(game);
+            game.AddUnit(tank);
 
             game.Start();
 
