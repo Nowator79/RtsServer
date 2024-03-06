@@ -1,4 +1,5 @@
 ﻿using RtsServer.App.Buttle.Dto;
+using RtsServer.App.Buttle.Units;
 
 namespace RtsServer.App.Buttle.MapButlle.ChunksType
 {
@@ -7,6 +8,7 @@ namespace RtsServer.App.Buttle.MapButlle.ChunksType
         public ChunkBase(int id)
         {
             Id = id;
+            UnitsInPoint = new();
         }
 
         public ChunkBase(int id, int height) : this(id)
@@ -16,5 +18,7 @@ namespace RtsServer.App.Buttle.MapButlle.ChunksType
 
         public int Id { get; set; } = 1;
         public int Height { get; set; } = 1;
+        public List<Unit> UnitsInPoint { get; set; }
+
     }
 }

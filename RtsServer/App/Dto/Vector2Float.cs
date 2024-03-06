@@ -15,7 +15,7 @@ namespace RtsServer.App.Buttle.Dto
 
         public Vector2Int ToInt()
         {
-            return new Vector2Int(Convert.ToInt32(X), Convert.ToInt32(Y));
+            return new Vector2Int(Convert.ToInt32(Math.Round(X)), Convert.ToInt32(Math.Round(Y)));
         }
 
         public static Vector2Float operator +(Vector2Float counter1, Vector2Float counter2)

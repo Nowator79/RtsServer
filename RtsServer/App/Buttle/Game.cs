@@ -10,6 +10,7 @@ using RtsServer.App.NetWorkDto.Response;
 using RtsServer.App.NetWorkResponseSender;
 using RtsServer.App.Tools;
 using RtsServer.App.ViewConsole;
+using System.Threading.Tasks;
 
 namespace RtsServer.App.Buttle
 {
@@ -23,7 +24,7 @@ namespace RtsServer.App.Buttle
         public List<Construction> Constructions { get; set; } = new();
         public ButtleManager ButtleManager { get; private set; }
         public TimeSystem TimeSystem { get; private set; }
-        public List<Action> ActionsUpdate { private get; set; } = new();
+        public Action ActionsUpdate { private get; set; }
 
         private readonly GroundUnitNavigator gNav;
 
@@ -66,8 +67,8 @@ namespace RtsServer.App.Buttle
             }
 
             SendUpdateGame();
-            ActionsUpdate.Add(SendUpdateGame);
-            ActionsUpdate.Add(TimeSystem.Update);
+            ActionsUpdate += SendUpdateGame;
+            ActionsUpdate += TimeSystem.Update;
 
             SetStatusUsersInGame();
 
@@ -120,20 +121,47 @@ namespace RtsServer.App.Buttle
 
         public void Update()
         {
-            foreach (Action action in ActionsUpdate)
-            {
-                action();
-            }
+            ActionsUpdate();
+
+            List<Task> tasks = new();
 
             // Движение к цели
             Units.ForEach(unit =>
             {
-                unit.MoveToTarget();
+                tasks.Add(Task.Run(unit.Update));
             });
+            Task.WaitAll(tasks.ToArray());
 
             if (ConfigGameServer.IsDebugGameUpdate)
             {
                 GameViewer.ViewFullInfo(this);
+                if (ConfigGameServer.IsEnabledClearConsole) Console.Clear();
+            }
+
+
+            if (ConfigGameServer.IsDebugChunkStatus)
+            {
+                int[,] viewConsoleArray = new int[Map.Width, Map.Length];
+                for (int x = 0; x < Map.Width; x++)
+                {
+                    for (int y = 0; y < Map.Length; y++)
+                    {
+                        viewConsoleArray[x, y] = Map.Chunks[x * Map.Length + y].UnitsInPoint.Count;
+                    }
+                }
+
+                for (int x = 0; x < Map.Width; x++)
+                {
+                    for (int y = 0; y < Map.Length; y++)
+                    {
+                        Console.Write($"{viewConsoleArray[x, y],2}");
+                    }
+                    Console.WriteLine();
+                }
+                Console.WriteLine("=============");
+                Console.WriteLine();
+
+
                 if (ConfigGameServer.IsEnabledClearConsole) Console.Clear();
             }
         }

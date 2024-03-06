@@ -41,7 +41,10 @@ namespace RtsServer.App.Buttle.Navigator
             navWave.Run();
 
             // выставляем результат функции поиска пути волной 
-            Unit.SetRouts(navWave.GetRoutPath().ToHashSet());
+            if (!navWave.IsFail)
+            {
+                Unit.SetRouts(navWave.GetRoutPath().ToHashSet());
+            }
         }
     }
 }

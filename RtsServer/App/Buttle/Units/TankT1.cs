@@ -6,13 +6,13 @@ namespace RtsServer.App.Buttle.Units
     {
         public TankT1(Vector2Float position) : base("TankT1", new(2000), position)
         {
-            Speed = 1.2;
-            RotationSpeed = 0.5;
+            Speed = 7;
+            RotationSpeed = 10;
         }
         public TankT1(Vector2Int position) : base("TankT1", new(2000), position)
         {
-            Speed = 1.2;
-            RotationSpeed = 0.5;
+            Speed = 7;
+            RotationSpeed = 10;
         }
     }
 }

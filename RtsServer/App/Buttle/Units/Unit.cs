@@ -1,11 +1,39 @@
 ﻿using RtsServer.App.Buttle.Dto;
 using RtsServer.App.Buttle.Navigator;
+using RtsServer.App.NetWork.Tcp;
+using RtsServer.App.NetWorkDto;
+using RtsServer.App.NetWorkResponseSender;
 
 namespace RtsServer.App.Buttle.Units
 {
     public class Unit
     {
-        protected const int KRotationSpeed = 50;
+        /// идентификаторы 
+        public int Id { get; set; }
+        public string Code { get; set; }
+
+        // состояние здоровья
+        public Health Health { get; set; }
+        // текущая позиция
+        public Vector2Float Position { get; protected set; }
+        // текущая позиция в чанке, нужна для проверки изменения позиции
+        public Vector2Int CurChunkPosition { get; protected set; }
+
+        // характеристики
+        public double Speed { get; protected set; } = 1;
+        public double RotationSpeed { get; protected set; }
+
+        // навигация
+        public Vector2Int TargetPosition { get; protected set; }
+        public double Rotation { get; protected set; }
+        public HashSet<Vector2Int> PathRout { get; private set; }
+        protected INavigator Navigatior { get; set; }
+        protected Action BeforeUpdateChunkPosition { get; set; }
+        protected Action AfterUpdateChunkPosition { get; set; }
+        // контекст  
+        private Game Game { get; set; }
+
+        protected const int KRotationSpeed = 1;
         public Unit(string xmlId, Health health, Vector2Float position)
         {
             Code = xmlId;
@@ -30,6 +58,12 @@ namespace RtsServer.App.Buttle.Units
         {
             Game = context;
             Navigatior.SetMap(Game.Map);
+            AfterUpdateChunkPosition += () => {
+              
+            };
+            BeforeUpdateChunkPosition += () => {
+                
+            };
         }
 
         public void SetId(int Id)
@@ -45,8 +79,14 @@ namespace RtsServer.App.Buttle.Units
         public Unit SetTargetPosition(Vector2Int TargetPosition)
         {
             this.TargetPosition = TargetPosition;
-            Navigatior.Start();
-
+            try
+            {
+                Navigatior.Start();
+            }
+            catch (Exception e)
+            {
+                //Console.WriteLine(e);
+            }
             return this;
         }
 
@@ -67,6 +107,17 @@ namespace RtsServer.App.Buttle.Units
         public void SetRouts(HashSet<Vector2Int> routs)
         {
             PathRout = routs;
+
+            foreach (Player player in Game.Players)
+            {
+                UserClientTcp? userTcp = Game.ButtleManager.GameServer.TcpServer.GetClientByUserAuth(player.UserAuth);
+
+                if (userTcp != null)
+                {
+                    new UnitPathNavSender(userTcp).SetDate(new NUnitPathNav(Id, routs)).SendMessage();
+                }
+            }
+
         }
 
         /// <summary>
@@ -92,8 +143,8 @@ namespace RtsServer.App.Buttle.Units
                 if (RotationToTarget(targetFloat))
                 {
                     double dTime = Game.TimeSystem.GetDetlta();
-                    Vector2Float newPosition = Position + (targetFloat - Position).Normalize() * Speed * dTime;
-                    if (Vector2Float.Distance(Position, newPosition) >= Vector2Float.Distance(Position, targetFloat))
+                    Vector2Float newPosition = Position + (targetFloat - Position).Normalize() * Speed * dTime / 100;
+                    if (Vector2Float.DistanceSQRT(Position, newPosition) >= Vector2Float.DistanceSQRT(Position, targetFloat))
                     {
                         newPosition = targetFloat;
                     }
@@ -111,7 +162,7 @@ namespace RtsServer.App.Buttle.Units
             double typeAngle = Vector2Float.SideByVector(Position, GFacting, Target);
 
             double dTime = Game.TimeSystem.GetDetlta();
-            double upAngle = RotationSpeed *  KRotationSpeed * dTime;
+            double upAngle = RotationSpeed * KRotationSpeed * dTime;
             double newAngle = Rotation;
             if (upAngle > AngleToTarget) upAngle = AngleToTarget;
             if (typeAngle > 0)
@@ -129,7 +180,7 @@ namespace RtsServer.App.Buttle.Units
             }
             Rotation = newAngle;
 
-            if (AngleToTarget%180 < 5 || double.IsNaN(0 / AngleToTarget))
+            if (AngleToTarget % 180 < 5 || double.IsNaN(0 / AngleToTarget))
             {
                 return true;
             }
@@ -138,26 +189,26 @@ namespace RtsServer.App.Buttle.Units
                 return false;
             }
         }
+        
+        private void CheckChunk()
+        {
+            if(CurChunkPosition != Position.ToInt())
+            {
+                MapButlle.ChunksType.ChunkBase tmp = Game.Map.GetArrayMap()[CurChunkPosition.X, CurChunkPosition.Y];
+                tmp.UnitsInPoint.Remove(this);
 
-        /// Идентификаторы 
-        public int Id { get; set; }
-        public string Code { get; set; }
+                CurChunkPosition = Position.ToInt();
 
-        // Состояние 
-        public Health Health { get; set; }
-        public Vector2Float Position { get; protected set; }
+                MapButlle.ChunksType.ChunkBase tmp2 = Game.Map.GetArrayMap()[CurChunkPosition.X, CurChunkPosition.Y];
+                tmp2.UnitsInPoint.Add(this);
 
-        // характеристики
-        public double Speed { get; protected set; } = 1;
-        public double RotationSpeed { get; protected set; }
+            }
+        }
 
-        // навигация
-        public Vector2Int TargetPosition { get; protected set; }
-        public double Rotation { get; protected set; }
-        public HashSet<Vector2Int> PathRout { get; private set; }
-        protected INavigator Navigatior { get; set; }
-
-        // контекст  
-        private Game Game { get; set; }
+        public void Update()
+        {
+            MoveToTarget();
+            CheckChunk();
+        }
     }
 }

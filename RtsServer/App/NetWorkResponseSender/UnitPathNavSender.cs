@@ -2,11 +2,11 @@
 
 namespace RtsServer.App.NetWorkResponseSender
 {
-    public class StartGameSender : NetWorkSenderBase
+    public class UnitPathNavSender : NetWorkSenderBase
     {
-        public StartGameSender(UserClientTcp clientApi) : base(clientApi)
+        public UnitPathNavSender(UserClientTcp clientApi) : base(clientApi)
         {
-            response = new("battle", "/gameBattle/startGame/", "200");
+            response = new("battle", "/gameBattle/unitPathNav/", "200");
         }
 
         public override NetWorkSenderBase SetDate(object data)

@@ -20,7 +20,7 @@ namespace RtsServer.App.Buttle.Navigator
         private HashSet<Vector2Int> _pollCurPoints;
         private HashSet<Vector2Int> _pollNextPoints;
 
-
+        public bool IsFail { get; private set; } = false;
         public NavWave(
             Map map,
             Vector2Int startPoint,
@@ -59,14 +59,14 @@ namespace RtsServer.App.Buttle.Navigator
 
             _mapChunks[curPoint.X, curPoint.Y].StepsCount = step;
 
-            HashSet<NavChunk> nearChuks = NavHelper.GetNavChunksByPoints(
+            HashSet<NavChunk> nearChunksHS = NavHelper.GetNavChunksByPoints(
                 NavHelper.GetSafeNear(curPoint, _map.Width, _map.Length), _mapChunks
                 ).ToHashSet();
 
             HashSet<NavChunk> forRemoveChunks = new();
-            foreach (NavChunk nearChunk in nearChuks)
+            foreach (NavChunk nearChunk in nearChunksHS)
             {
-                if (!NavHelper.CanMove(_mapChunks[curPoint.X, curPoint.Y], nearChunk))
+                if (!CanMove(nearChunk.Position.X, nearChunk.Position.Y))
                 {
                     forRemoveChunks.Add(nearChunk);
                 }
@@ -74,24 +74,27 @@ namespace RtsServer.App.Buttle.Navigator
 
             foreach (NavChunk item in forRemoveChunks)
             {
-                nearChuks.Remove(item);
+                nearChunksHS.Remove(item);
             }
 
-            NavChunk[] nearChunks = NavHelper.GetSortByDistanceChunk(nearChuks.ToArray());
+            NavChunk[] nearChunks = NavHelper.GetSortByDistanceChunk(nearChunksHS.ToArray());
             foreach (NavChunk nearChunk in nearChunks)
             {
                 _pollNextPoints.Add(nearChunk.Position);
             }
         }
-
+        private int reversCount = 200;
         private void ReversProcessChunk(NavChunk curChunk)
         {
-
+            if (reversCount-- < 0)
+            {
+                return;
+            }
             HashSet<NavChunk> chunksTmp = NavHelper.GetNavChunksByPoints(
              NavHelper.GetSafeNear(curChunk.Position, _map.Width, _map.Length), _mapChunks
              ).ToHashSet();
-        
-            chunksTmp.RemoveWhere(itemChunk => !NavHelper.CanMove(curChunk, itemChunk));
+
+            chunksTmp.RemoveWhere(itemChunk => !CanMove(itemChunk.Position.X, itemChunk.Position.Y) && !(_startPoint.X  == itemChunk.Position.X && _startPoint.Y == itemChunk.Position.Y));
 
             NavChunk nearChunk = NavHelper.GetSortForReverseChunk(chunksTmp.ToArray(), curChunk.Position.X, curChunk.Position.Y);
 
@@ -109,6 +112,12 @@ namespace RtsServer.App.Buttle.Navigator
 
         public void Run()
         {
+            if(!CanMove(_endPoint.X, _endPoint.Y))
+            {
+                IsFail = true;
+                return;
+            }
+
             for (int x = 0; x < _map.Width; x++)
             {
                 for (int y = 0; y < _map.Length; y++)
@@ -119,7 +128,7 @@ namespace RtsServer.App.Buttle.Navigator
             }
 
             // анализ карты
-            Vector2Int startPoint = new Vector2Int(_startPoint.X, _startPoint.Y);
+            Vector2Int startPoint = new(_startPoint.X, _startPoint.Y);
             int step = 0;
             _pollCurPoints.Add(startPoint);
             while (_pollCurPoints.Count > 0)
@@ -227,5 +236,11 @@ namespace RtsServer.App.Buttle.Navigator
         }
 
         public List<Vector2Int> GetRoutPath() => routeNavigation;
+
+        public bool CanMove(int X, int Y)
+        {
+            var tmp = _map.GetArrayMap()[X, Y];
+            return tmp.Height == 1 && tmp.UnitsInPoint.Count == 0;
+        }
     }
 }

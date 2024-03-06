@@ -2,12 +2,18 @@
 {
     public static class ConfigGameServer
     {
+        // Показывать лог отправленных и полученных пакетов
         public const bool IsDebugNetWork = false;
+        // Показывать таблицу игроков
         public const bool IsDebugGameUpdate = false;
-        public const bool IsDebugGameNavUpdate = true;
+        // Показывать логи расчета навигации
+        public const bool IsDebugGameNavUpdate = false;
         public const bool IsDebugGameUsersInfoUpdate = false;
         public const bool IsDebugStartGame = false;
-
+        public const bool IsDebugTimeUpdate = false;
+        // Проверка статуса чанков
+        public const bool IsDebugChunkStatus = false;
+        
         public const bool IsEnabledClearConsole = false;
     }
 }
