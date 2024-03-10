@@ -23,7 +23,7 @@ namespace RtsServer.App.Buttle.Units
         public double Speed { get; protected set; } = 1;
         public double RotationSpeed { get; protected set; }
 
-        // навигация
+        // навигация    
         public Vector2Int TargetPosition { get; protected set; }
         public double Rotation { get; protected set; }
         public HashSet<Vector2Int> PathRout { get; private set; }
