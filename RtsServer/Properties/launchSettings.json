@@ -1,0 +1,7 @@
+{
+  "profiles": {
+    "RtsServer": {
+      "commandName": "Project"
+    }
+  }
+}

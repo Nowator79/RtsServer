@@ -1,24 +1,24 @@
-﻿using RtsServer.App.Buttle.Constructions;
-using RtsServer.App.Buttle.Dto;
+﻿using RtsServer.App.Battle.Constructions;
+using RtsServer.App.Battle.Dto;
 
-namespace RtsServer.App.Buttle.Units
+namespace RtsServer.App.Battle.Units
 {
     public class UnitFactory
     {
-        public static Unit GetByCode(string code, Vector2Int position)
+        public static Unit GetByCode(string code, Vector2Int position, int player)
         {
-            Type? TestType = Type.GetType($"RtsServer.App.Buttle.Units.{code}");
+            Type? TestType = Type.GetType($"RtsServer.App.Battle.Units.{code}");
 
             //если класс не найден
             if (TestType != null)
             {
                 //получаем конструктор
-                Type[] types = new Type[] { typeof(Vector2Int) };
+                Type[] types = new Type[] { typeof(Vector2Int), typeof(int) };
                 System.Reflection.ConstructorInfo? ci = TestType.GetConstructor(types);
                 if (ci == null) throw new Exception("Не найден конструктор");
 
-                Unit? construction = (Unit)ci.Invoke(new object[] { position });
-                if (construction == null) throw new Exception("Проблемы с обьектом");
+                Unit? construction = (Unit)ci.Invoke([position, player]);
+                if (construction == null) throw new Exception("Проблемы с объектом");
 
                 return construction;
             }

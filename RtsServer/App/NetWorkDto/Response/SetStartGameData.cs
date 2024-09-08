@@ -1,5 +1,5 @@
 ﻿
-using RtsServer.App.Buttle.Dto;
+using RtsServer.App.Battle.Dto;
 
 namespace RtsServer.App.NetWorkDto.Response
 {

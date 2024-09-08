@@ -1,5 +1,5 @@
-﻿using RtsServer.App.Buttle.Dto;
-namespace RtsServer.App.Buttle.Constructions
+﻿using RtsServer.App.Battle.Dto;
+namespace RtsServer.App.Battle.Constructions
 {
     public class Headquarters : Construction
     {

@@ -3,11 +3,11 @@ using System.Text.Json;
 
 namespace RtsServer.App.FileSystem
 {
-    public class MapSceneFileManagereManager : FileManager
+    public class MapSceneFileManager : FileManager
     {
-        public MapSceneFileManagereManager()
+        public MapSceneFileManager()
         {
-            path = @"D:\Radium Rts\MapScene";
+            path = MainFolder  + @"MapScene";
             format = "json";
         }
 

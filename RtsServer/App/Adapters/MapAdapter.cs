@@ -1,4 +1,4 @@
-﻿using RtsServer.App.Buttle.MapButlle;
+﻿using RtsServer.App.Battle.MapButlle;
 using RtsServer.App.FileSystem.Dto;
 
 namespace RtsServer.App.Adapters
@@ -25,7 +25,7 @@ namespace RtsServer.App.Adapters
             resMap.SetCode(map.Name);
             map.Chunks.ForEach(chunk =>
             {
-                resMap.Chunks.Add(new Buttle.MapButlle.ChunksType.ChunkBase(chunk.TypeId, chunk.Height));
+                resMap.Chunks.Add(new Battle.MapButlle.ChunksType.ChunkBase(chunk.TypeId, chunk.Height));
             });
 
             return resMap;

@@ -4,6 +4,7 @@
     {
         protected string path;
         protected string format;
+        protected const string MainFolder = @"C:\Radium Rts\";
 
         public FileManager()
         {

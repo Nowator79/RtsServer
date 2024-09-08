@@ -1,7 +1,7 @@
-﻿using RtsServer.App.Buttle.MapButlle;
-using RtsServer.App.Buttle.Units;
+﻿using RtsServer.App.Battle.MapButlle;
+using RtsServer.App.Battle.Units;
 
-namespace RtsServer.App.Buttle.Navigator
+namespace RtsServer.App.Battle.Navigator
 {
     public interface INavigator
     {

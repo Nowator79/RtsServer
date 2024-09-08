@@ -1,5 +1,5 @@
 ﻿
-using RtsServer.App.Buttle;
+using RtsServer.App.Battle;
 using System.Text;
 
 namespace RtsServer.App.ViewConsole
@@ -8,10 +8,10 @@ namespace RtsServer.App.ViewConsole
     {
         public static void View(Game game)
         {
-            Console.WriteLine($"Game ID: {game.Id}, TimeCreated: {new DateTime(game.CreateDateTime).ToLongTimeString()} TimeButtle: {new DateTime(DateTime.Now.Ticks - game.CreateDateTime).ToLongTimeString()}");
+            Console.WriteLine($"Game ID: {game.Id}, TimeCreated: {new DateTime(game.CreateDateTime).ToLongTimeString()} TimeBattle: {new DateTime(DateTime.Now.Ticks - game.CreateDateTime).ToLongTimeString()}");
             Console.WriteLine($"{"Id",20} | {"XmlCode",20} | {"Health",10} |  {"Position",10} |");
 
-            foreach (Buttle.Units.Unit unit in game.Units)
+            foreach (Battle.Units.Unit unit in game.Units)
             {
                 Console.WriteLine(new StringBuilder().Insert(0, "-", 72).ToString());
                 Console.Write($"{unit.Id,20} | {unit.Code,20} | {HealhtViewer.GetStringView(unit.Health),10} |  {VectorViewer.GetStringView(unit.Position),10} |");
@@ -25,10 +25,10 @@ namespace RtsServer.App.ViewConsole
         {
             if (ConfigGameServer.IsDebugGameUsersInfoUpdate)
             {
-                Console.WriteLine($"Game ID: {game.Id}, TimeCreated: {new DateTime(game.CreateDateTime).ToLongTimeString()} TimeButtle: {new DateTime(DateTime.Now.Ticks - game.CreateDateTime).ToLongTimeString()}");
+                Console.WriteLine($"Game ID: {game.Id}, TimeCreated: {new DateTime(game.CreateDateTime).ToLongTimeString()} TimeBattle: {new DateTime(DateTime.Now.Ticks - game.CreateDateTime).ToLongTimeString()}");
                 Console.WriteLine($"{"Id",20} | {"XmlCode",20} | {"Health",10} |  {"Position",10} |");
 
-                foreach (Buttle.Units.Unit unit in game.Units)
+                foreach (Battle.Units.Unit unit in game.Units)
                 {
                     Console.WriteLine(new StringBuilder().Insert(0, "-", 72).ToString());
                     Console.Write($"{unit.Id,20} | {unit.Code,20} | {HealhtViewer.GetStringView(unit.Health),10} |  {VectorViewer.GetStringView(unit.Position),10} |");
@@ -46,14 +46,17 @@ namespace RtsServer.App.ViewConsole
                 }
             }
 
-            game.Units.ForEach(unit =>
+            if (false)
             {
-                foreach (Buttle.Dto.Vector2Int point in unit.PathRout)
+                game.Units.ForEach(unit =>
                 {
-                    viewConsoleArray[point.X, point.Y] = '?';
-                }
-                viewConsoleArray[Convert.ToInt16(unit.Position.X), Convert.ToInt16(unit.Position.Y)] = 'u';
-            });
+                    foreach (Battle.Dto.Vector2Int point in unit.PathRout)
+                    {
+                        viewConsoleArray[point.X, point.Y] = '?';
+                    }
+                    viewConsoleArray[Convert.ToInt16(unit.Position.X), Convert.ToInt16(unit.Position.Y)] = 'u';
+                });
+            }
 
             for (int x = 0; x < game.Map.Width; x++)
             {

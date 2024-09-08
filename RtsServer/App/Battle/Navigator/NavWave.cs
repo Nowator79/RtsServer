@@ -1,8 +1,8 @@
-﻿using RtsServer.App.Buttle.Dto;
-using RtsServer.App.Buttle.MapButlle;
-using RtsServer.App.Buttle.MapButlle.ChunksType;
+﻿using RtsServer.App.Battle.Dto;
+using RtsServer.App.Battle.MapButlle;
+using RtsServer.App.Battle.MapButlle.ChunksType;
 
-namespace RtsServer.App.Buttle.Navigator
+namespace RtsServer.App.Battle.Navigator
 {
     public class NavWave
     {

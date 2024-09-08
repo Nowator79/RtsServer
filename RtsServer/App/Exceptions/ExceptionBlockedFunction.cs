@@ -2,7 +2,7 @@
 {
     internal class ExceptionBlockedFunction : Exception
     {
-        public ExceptionBlockedFunction() : base("Нельзя использовать загружать данные в этот запросс")
+        public ExceptionBlockedFunction() : base("Нельзя использовать загружать данные в этот запрос")
         {
         }
     }

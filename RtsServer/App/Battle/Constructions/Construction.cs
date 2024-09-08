@@ -1,6 +1,6 @@
-﻿using RtsServer.App.Buttle.Dto;
+﻿using RtsServer.App.Battle.Dto;
 
-namespace RtsServer.App.Buttle.Constructions
+namespace RtsServer.App.Battle.Constructions
 {
     public class Construction
     {

@@ -1,7 +1,7 @@
-﻿using RtsServer.App.Buttle.Dto;
-using RtsServer.App.Buttle.Units;
+﻿using RtsServer.App.Battle.Dto;
+using RtsServer.App.Battle.Units;
 
-namespace RtsServer.App.Buttle.MapButlle.ChunksType
+namespace RtsServer.App.Battle.MapButlle.ChunksType
 {
     public class ChunkBase
     {

@@ -14,7 +14,7 @@ namespace RtsServer.App.DataBase
 
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {
-            optionsBuilder.UseMySql("server=localhost;user=root;password=rootpassword;database=rts_server;",
+            optionsBuilder.UseMySql("server=localhost;user=root;password=root;database=rts_server;",
                 new MySqlServerVersion(new Version(8, 0, 25)));
         }
     }

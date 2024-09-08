@@ -1,5 +1,4 @@
 ﻿using RtsServer.App.DataBase.Dto;
-using RtsServer.App.NetWorkDto;
 using RtsServer.App.NetWorkDto.Response;
 using System.Net.Sockets;
 using System.Text;
@@ -22,7 +21,7 @@ namespace RtsServer.App.NetWork.Tcp
         public int CountRead { get; private set; } = 0;
 
         public UserAuth User { get; private set; }
-        protected bool _isDisconect { get; set; } = false;
+        protected bool _isDisconnect { get; set; } = false;
 
         public void SetUser(UserAuth User)
         {
@@ -52,21 +51,21 @@ namespace RtsServer.App.NetWork.Tcp
             {
                 while (true)
                 {
-
                     MainResponse mainResponse = Read();
                     server.GetProcessor().Handler(mainResponse, this);  // event write client
                 }
             }
-            catch
+            catch(Exception ex) 
             {
-                Disconect();
+                Console.WriteLine(ex.Message);
+                Disconnect();
             }
         }
 
-        public void Disconect()
+        public void Disconnect()
         {
             Console.WriteLine($"Клиент {Id} отключился");
-            _isDisconect = true;
+            _isDisconnect = true;
             server.DisconectUser(this);
         }
 
@@ -79,16 +78,16 @@ namespace RtsServer.App.NetWork.Tcp
             CountRead++;
             int bytesRead;
 
-            while (!_isDisconect)
+            while (!_isDisconnect)
             {
-                if (Stream.CanRead && !_isDisconect)
+                if (Stream.CanRead && !_isDisconnect)
                 {
-                    while ((bytesRead = Stream.ReadByte()) != '\n' && !_isDisconect)
+                    while ((bytesRead = Stream.ReadByte()) != '\n' && !_isDisconnect)
                     {
                         r = r.Append((byte)bytesRead).ToArray();
                         response.Add((byte)bytesRead);
                     }
-                    if (_isDisconect)
+                    if (_isDisconnect)
                     {
                         throw new Exception("Выход из чтения");
                     }

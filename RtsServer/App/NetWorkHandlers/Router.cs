@@ -18,6 +18,8 @@ namespace RtsServer.App.NetWorkHandlers
                 {"/auth/login/", new Login() },
                 {"/auth/ping/", new Ping() },
                 {"/gameBattle/addQueue/", new BattleAddQueue() },
+                {"/gameBattle/cancelSearchBattle/", new BattleCancelQueue() },
+                {"/gameBattle/exitBattle/", new BattleExit() },
                 {"/gameBattle/get/", new GetGameForUser() },
                 {"/gameBattle/setChunk/", new SetChunkProcessor() },
                 {"/gameBattle/unitSetTarget/", new SetTargetUnitsProcessor() },

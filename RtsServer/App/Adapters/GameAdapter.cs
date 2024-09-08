@@ -1,4 +1,4 @@
-﻿using RtsServer.App.Buttle;
+﻿using RtsServer.App.Battle;
 using RtsServer.App.NetWorkDto;
 
 namespace RtsServer.App.Adapters
@@ -11,12 +11,12 @@ namespace RtsServer.App.Adapters
             List<NUnit> NUnits = new();
             List<NConstruction> NConstructions = new();
 
-            foreach (Buttle.Units.Unit unit in game.Units)
+            foreach (Battle.Units.Unit unit in game.Units)
             {
                 NUnits.Add(UnitAdapter.Get(unit));
             }
 
-            foreach (Buttle.Constructions.Construction construction in game.Constructions)
+            foreach (Battle.Constructions.Construction construction in game.Constructions)
             {
                 NConstructions.Add(ConstructionAdapter.Get(construction));
             }

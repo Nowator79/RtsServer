@@ -1,17 +1,17 @@
-﻿using RtsServer.App.Buttle.Dto;
-using RtsServer.App.Buttle.Navigator;
+﻿using RtsServer.App.Battle.Dto;
+using RtsServer.App.Battle.Navigator;
 using RtsServer.App.NetWork.Tcp;
 using RtsServer.App.NetWorkDto;
 using RtsServer.App.NetWorkResponseSender;
 
-namespace RtsServer.App.Buttle.Units
+namespace RtsServer.App.Battle.Units
 {
     public class Unit
     {
         /// идентификаторы 
         public int Id { get; set; }
         public string Code { get; set; }
-
+        public int PlayerOwner { get; set; }
         // состояние здоровья
         public Health Health { get; set; }
         // текущая позиция
@@ -34,7 +34,7 @@ namespace RtsServer.App.Buttle.Units
         private Game Game { get; set; }
 
         protected const int KRotationSpeed = 1;
-        public Unit(string xmlId, Health health, Vector2Float position)
+        public Unit(string xmlId, Health health, Vector2Float position, int playerOwner)
         {
             Code = xmlId;
             Health = health;
@@ -42,9 +42,10 @@ namespace RtsServer.App.Buttle.Units
             Navigatior = new GroundUnitNavigator();
             Navigatior.SetUnit(this);
             Rotation = 0;
+            PlayerOwner = playerOwner;
         }
 
-        public Unit(string xmlId, Health health, Vector2Int position)
+        public Unit(string xmlId, Health health, Vector2Int position, int playerOwner)
         {
             Code = xmlId;
             Health = health;
@@ -52,6 +53,7 @@ namespace RtsServer.App.Buttle.Units
             Navigatior = new GroundUnitNavigator();
             Navigatior.SetUnit(this);
             Rotation = 0;
+            PlayerOwner = playerOwner;
         }
 
         public void SetGame(Game context)
@@ -110,7 +112,7 @@ namespace RtsServer.App.Buttle.Units
 
             foreach (Player player in Game.Players)
             {
-                UserClientTcp? userTcp = Game.ButtleManager.GameServer.TcpServer.GetClientByUserAuth(player.UserAuth);
+                UserClientTcp? userTcp = Game.BattleManager.GameServer.TcpServer.GetClientByUserAuth(player.UserAuth);
 
                 if (userTcp != null)
                 {
@@ -142,7 +144,7 @@ namespace RtsServer.App.Buttle.Units
                 // Поворачиваемся до цели если поворот правильный идем к цели
                 if (RotationToTarget(targetFloat))
                 {
-                    double dTime = Game.TimeSystem.GetDetlta();
+                    double dTime = Game.TimeSystem.GetDelta();
                     Vector2Float newPosition = Position + (targetFloat - Position).Normalize() * Speed * dTime / 100;
                     if (Vector2Float.DistanceSQRT(Position, newPosition) >= Vector2Float.DistanceSQRT(Position, targetFloat))
                     {
@@ -161,7 +163,7 @@ namespace RtsServer.App.Buttle.Units
             double AngleToTarget = Vector2Float.AngleByVectorsAndRot(Position, GFactingC.Normalize(), Target);
             double typeAngle = Vector2Float.SideByVector(Position, GFacting, Target);
 
-            double dTime = Game.TimeSystem.GetDetlta();
+            double dTime = Game.TimeSystem.GetDelta();
             double upAngle = RotationSpeed * KRotationSpeed * dTime;
             double newAngle = Rotation;
             if (upAngle > AngleToTarget) upAngle = AngleToTarget;

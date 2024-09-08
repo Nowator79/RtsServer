@@ -1,8 +1,8 @@
-﻿using RtsServer.App.Buttle;
+﻿using RtsServer.App.Battle;
 using RtsServer.App.DataBase.Db;
 using RtsServer.App.NetWork.Tcp;
 using RtsServer.App.NetWorkHandlers;
-
+    
 namespace RtsServer.App
 {
     public class GameServer
@@ -11,7 +11,7 @@ namespace RtsServer.App
         public Server TcpServer { get; private set; }
         public Router Router { get; private set; }
         public DbUsers DbUsers { get; private set; }
-        public ButtleManager ButtleManager { get; private set; }
+        public BattleManager BattleManager { get; private set; }
         public List<Action> ActionsUpdate { get; }
         private bool IsCancel { get; set; } = false;
         public GameServer(int port)
@@ -22,7 +22,7 @@ namespace RtsServer.App
             Router.SetContext(this);
 
             DbUsers = new();
-            ButtleManager = new(this);
+            BattleManager = new(this);
             ActionsUpdate = new();
 
         }
@@ -45,7 +45,7 @@ namespace RtsServer.App
 
             //ActionsUpdate.Add(() =>
             //{
-            //    ButtleManager.Games.ForEach(game =>
+            //    BattleManager.Games.ForEach(game =>
             //    {
             //        GameViewer.ViewFullInfo(game);
             //    });
@@ -74,6 +74,13 @@ namespace RtsServer.App
             {
                 action();
             }
+            List<UserClientTcp> clients = TcpServer.GetUsers();
+
+            if(ConfigGameServer.IsEnabledClearConsole)
+            {
+                Console.Clear();
+            }
+            //UserViewer.View(clients);
         }
 
         private void CheckPing()
@@ -91,7 +98,7 @@ namespace RtsServer.App
             foreach (UserClientTcp item in disconectsList)
             {
                 clients.Remove(item);
-                item.Disconect();
+                item.Disconnect();
 
             }
             disconectsList.Clear();

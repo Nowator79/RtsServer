@@ -1,7 +1,7 @@
-﻿using RtsServer.App.Buttle.Dto;
+﻿using RtsServer.App.Battle.Dto;
 using System.Collections.Generic;
 
-namespace RtsServer.App.Buttle.Navigator
+namespace RtsServer.App.Battle.Navigator
 {
     public static class NavHelper
     {

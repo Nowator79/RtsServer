@@ -1,6 +1,6 @@
-﻿using RtsServer.App.Buttle.Constructions;
-using RtsServer.App.Buttle.MapButtle;
-using RtsServer.App.Buttle.Units;
+﻿using RtsServer.App.Battle.Constructions;
+using RtsServer.App.Battle.MapBattle;
+using RtsServer.App.Battle.Units;
 using RtsServer.App.FileSystem;
 using RtsServer.App.FileSystem.Dto;
 
@@ -19,7 +19,7 @@ namespace RtsServer.App.Adapters
             HashSet<Unit> units = new();
             foreach (FUnit unit in mapScene.Units)
             {
-                units.Add(UnitFactory.GetByCode(unit.Code, unit.Position));
+                units.Add(UnitFactory.GetByCode(unit.Code, unit.Position, unit.PlayerOwnerNum));
             }
 
             MapFileManager mapFileManager = new();

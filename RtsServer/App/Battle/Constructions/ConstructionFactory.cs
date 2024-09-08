@@ -1,13 +1,13 @@
-﻿using RtsServer.App.Buttle.Dto;
+﻿using RtsServer.App.Battle.Dto;
 
-namespace RtsServer.App.Buttle.Constructions
+namespace RtsServer.App.Battle.Constructions
 {
     public class ConstructionFactory
     {
 
         public static Construction GetByCode(string code, Vector2Int position)
         {
-            Type? TestType = Type.GetType($"RtsServer.App.Buttle.Constructions.{code}");
+            Type? TestType = Type.GetType($"RtsServer.App.Battle.Constructions.{code}");
 
             //если класс не найден
             if (TestType != null)

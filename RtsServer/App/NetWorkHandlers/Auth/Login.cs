@@ -20,7 +20,7 @@ namespace RtsServer.App.NetWorkHandlers.Auth
                     e.Password == userAuth.Value.Password
                     );
                 if (AUser == null) return;
-
+                /// todo
                 AUser.Status.SetInPassive();
                 clientTcp.SetUser(AUser);
 

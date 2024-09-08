@@ -9,7 +9,7 @@ namespace RtsServer.App.NetWorkHandlers.Game.Battle
         public void Handler(MainResponse response, GameServer context, UserClientTcp clientTcp)
         {
             clientTcp.User.Status.SetInSearch();
-            context.ButtleManager.AddUserForSearch(clientTcp.User);
+            context.BattleManager.AddUserForSearch(clientTcp.User);
         }
     }
 }

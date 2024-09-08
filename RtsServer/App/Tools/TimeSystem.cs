@@ -4,8 +4,11 @@ namespace RtsServer.App.Tools
 {
     public class TimeSystem
     {
-        private DateTime LastUpdate { get; set; }
-        private double LastReuslt { get; set; }
+
+        private Stopwatch timer = Stopwatch.StartNew();
+        private TimeSpan dt = TimeSpan.FromSeconds(1.0 / 50.0);
+        private TimeSpan elapsedTime = TimeSpan.Zero;
+
         public TimeSystem()
         {
             Update();
@@ -13,21 +16,14 @@ namespace RtsServer.App.Tools
 
         public void Update()
         {
-            LastUpdate = DateTime.Now;
-            LastReuslt = 0;
+            timer.Restart();
         }
 
-        public double GetDetlta()
+        public double GetDelta()
         {
-            if(LastReuslt != 0) return LastReuslt;
-            TimeSpan interval = DateTime.Now - LastUpdate;
-            double res = (double)interval.Ticks / (double)1000;
-            if (ConfigGameServer.IsDebugTimeUpdate)
-            {
-                Console.WriteLine(res);
-            }
-            LastReuslt = res;
-            return res;
+            elapsedTime = timer.Elapsed;
+
+            return elapsedTime.TotalMilliseconds;
         }
     }
 }

@@ -1,7 +1,7 @@
-﻿using RtsServer.App.Buttle.Dto;
+﻿using RtsServer.App.Battle.Dto;
 using System.Diagnostics.Metrics;
 
-namespace RtsServer.App.Buttle.Navigator
+namespace RtsServer.App.Battle.Navigator
 {
     public struct NavChunk
     {

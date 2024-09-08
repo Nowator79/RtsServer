@@ -1,11 +1,11 @@
-﻿using RtsServer.App.Buttle.Dto;
-using RtsServer.App.Buttle.MapButlle;
-using RtsServer.App.Buttle.Units;
+﻿using RtsServer.App.Battle.Dto;
+using RtsServer.App.Battle.MapButlle;
+using RtsServer.App.Battle.Units;
 using RtsServer.App.FileSystem.Dto;
 using RtsServer.App.NetWorkDto;
 using System.Numerics;
 
-namespace RtsServer.App.Buttle.Navigator
+namespace RtsServer.App.Battle.Navigator
 {
     public class GroundUnitNavigator : INavigator
     {

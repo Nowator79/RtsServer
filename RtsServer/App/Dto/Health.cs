@@ -1,4 +1,4 @@
-﻿namespace RtsServer.App.Buttle.Dto
+﻿namespace RtsServer.App.Battle.Dto
 {
     public struct Health
     {

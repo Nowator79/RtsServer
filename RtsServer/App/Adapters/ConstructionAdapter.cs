@@ -1,4 +1,4 @@
-﻿using RtsServer.App.Buttle.Constructions;
+﻿using RtsServer.App.Battle.Constructions;
 using RtsServer.App.NetWorkDto;
 
 namespace RtsServer.App.Adapters

@@ -10,7 +10,7 @@ namespace RtsServer.App.NetWorkHandlers.Game
         {
 
             MainResponse responseGame = new(response.type, response.action, response.status);
-            Buttle.Game? game = context.ButtleManager.Games.Find(
+            App.Battle.Game? game = context.BattleManager.Games.Find(
                     gameItem =>
                     {
                         bool isThisUser = false;

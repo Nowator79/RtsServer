@@ -7,14 +7,18 @@ namespace RtsServer.App.NetWorkHandlers.Game
     {
         public void Handler(MainResponse response, GameServer context, UserClientTcp clientTcp)
         {
-            Buttle.Game? game = context.ButtleManager.Games.Find(
+            App.Battle.Game? game = context.BattleManager.Games.Find(
                     gameItem =>
                     {
                         bool isThisUser = false;
-                        gameItem.Players.ForEach(player =>
+
+                        foreach (App.Battle.Player player in gameItem.Players)
                         {
                             isThisUser = player.UserAuth.Id == clientTcp.User.Id;
-                        });
+                            if (isThisUser) break;
+
+                        }
+         
                         return isThisUser;
                     }
                 );
@@ -23,7 +27,10 @@ namespace RtsServer.App.NetWorkHandlers.Game
             SetTargetUnits setTargetUnitsReq = response.GetBody<SetTargetUnits>();
             setTargetUnitsReq.UnitsIds.ForEach(unitID =>
             {
-                game.Units[unitID].SetTargetPosition(setTargetUnitsReq.Target);
+                var unit = game.Units[unitID];
+                if (clientTcp.User.Id == unit.PlayerOwner) {
+                    game.Units[unitID].SetTargetPosition(setTargetUnitsReq.Target);
+                }
             });
             
         }

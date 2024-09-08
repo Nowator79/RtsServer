@@ -1,8 +1,8 @@
-﻿using RtsServer.App.Buttle.Constructions;
-using RtsServer.App.Buttle.MapButlle;
-using RtsServer.App.Buttle.Units;
+﻿using RtsServer.App.Battle.Constructions;
+using RtsServer.App.Battle.MapButlle;
+using RtsServer.App.Battle.Units;
 
-namespace RtsServer.App.Buttle.MapButtle
+namespace RtsServer.App.Battle.MapBattle
 {
     public class MapScene
     {

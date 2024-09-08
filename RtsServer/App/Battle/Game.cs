@@ -1,18 +1,18 @@
 ﻿using RtsServer.App.Adapters;
-using RtsServer.App.Buttle.Constructions;
-using RtsServer.App.Buttle.Dto;
-using RtsServer.App.Buttle.MapButlle;
-using RtsServer.App.Buttle.Navigator;
-using RtsServer.App.Buttle.Units;
+using RtsServer.App.Battle.Chat;
+using RtsServer.App.Battle.Constructions;
+using RtsServer.App.Battle.Dto;
+using RtsServer.App.Battle.MapButlle;
+using RtsServer.App.Battle.Navigator;
+using RtsServer.App.Battle.Units;
 using RtsServer.App.NetWork.Tcp;
 using RtsServer.App.NetWorkDto;
 using RtsServer.App.NetWorkDto.Response;
 using RtsServer.App.NetWorkResponseSender;
 using RtsServer.App.Tools;
 using RtsServer.App.ViewConsole;
-using System.Threading.Tasks;
 
-namespace RtsServer.App.Buttle
+namespace RtsServer.App.Battle
 {
     public class Game
     {
@@ -22,7 +22,7 @@ namespace RtsServer.App.Buttle
         public List<Player> Players { get; set; } = new List<Player> { };
         public List<Unit> Units { get; set; } = new();
         public List<Construction> Constructions { get; set; } = new();
-        public ButtleManager ButtleManager { get; private set; }
+        public BattleManager BattleManager { get; private set; }
         public TimeSystem TimeSystem { get; private set; }
         public Action ActionsUpdate { private get; set; }
 
@@ -30,10 +30,11 @@ namespace RtsServer.App.Buttle
 
         private bool IsPlay = false;
 
-        public Game(int Id, ButtleManager buttleManager)
+
+        public Game(int Id, BattleManager battleManager)
         {
             this.Id = Id;
-            ButtleManager = buttleManager;
+            BattleManager = battleManager;
             CreateDateTime = DateTime.Now.Ticks;
             TimeSystem = new();
             gNav = new();
@@ -58,14 +59,14 @@ namespace RtsServer.App.Buttle
 
             foreach (Player player in Players)
             {
-                UserClientTcp? userTcp = ButtleManager.GameServer.TcpServer.GetClientByUserAuth(player.UserAuth);
+                UserClientTcp? userTcp = BattleManager.GameServer.TcpServer.GetClientByUserAuth(player.UserAuth);
 
                 if (userTcp != null)
                 {
                     new StartGameSender(userTcp).SetDate(new SetStartGameData(Map.Code, new Vector2Int())).SendMessage();
                 }
             }
-
+            Console.WriteLine("Старт");
             SendUpdateGame();
             ActionsUpdate += SendUpdateGame;
             ActionsUpdate += TimeSystem.Update;
@@ -79,11 +80,11 @@ namespace RtsServer.App.Buttle
         {
             foreach (Player player in Players)
             {
-                UserClientTcp? userTcp = ButtleManager.GameServer.TcpServer.GetClientByUserAuth(player.UserAuth);
+                UserClientTcp? userTcp = BattleManager.GameServer.TcpServer.GetClientByUserAuth(player.UserAuth);
 
                 if (userTcp != null)
                 {
-                    MainResponse responseGame = new("buttle", "/gameBattle/setGame/", "200");
+                    MainResponse responseGame = new("battle", "/gameBattle/setGame/", "200");
                     NGame nGame = GameAdapter.Get(this);
                     responseGame.SetBody(nGame);
                     userTcp.Write(responseGame);
@@ -169,6 +170,16 @@ namespace RtsServer.App.Buttle
         public void End()
         {
             IsPlay = false;
+            BattleManager.Games.Remove(this);
+            foreach (Player? palyer in Players)
+            {
+                UserClientTcp? userTcp = BattleManager.GameServer.TcpServer.GetClientByUserAuth(palyer.UserAuth);
+                if (userTcp != null)
+                {
+                    new EndGameSender(userTcp).SendMessage();
+                    palyer.UserAuth.Status.SetInPassive();
+                }
+            }
         }
 
         private void Loop()

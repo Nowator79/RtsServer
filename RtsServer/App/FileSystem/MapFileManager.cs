@@ -7,7 +7,7 @@ namespace RtsServer.App.FileSystem
     {
         public MapFileManager()
         {
-            path = @"D:\Radium Rts\Map";
+            path = MainFolder  + @"Map";
             format = "json";
         }
 

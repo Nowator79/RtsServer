@@ -1,7 +1,7 @@
 ﻿using RtsServer.App.Adapters;
 using RtsServer.App.FileSystem;
 
-namespace RtsServer.App.Buttle.MapButtle
+namespace RtsServer.App.Battle.MapBattle
 {
     public class MapSceneFactory
     {
@@ -10,7 +10,7 @@ namespace RtsServer.App.Buttle.MapButtle
         {
             HashSet<MapScene> result = new();
 
-            MapSceneFileManagereManager mapSceneFileManagereManager = new();
+            MapSceneFileManager mapSceneFileManagereManager = new();
 
             result.Add(MapSceneAdapter.Get(mapSceneFileManagereManager.LoadMapByName("test")));
 

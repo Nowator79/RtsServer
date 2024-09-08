@@ -1,6 +1,6 @@
-﻿using RtsServer.App.Buttle.Navigator;
+﻿using RtsServer.App.Battle.Navigator;
 
-namespace RtsServer.App.Buttle.Dto
+namespace RtsServer.App.Battle.Dto
 {
     public struct Vector2Float
     {
