@@ -1,11 +1,12 @@
-﻿using RtsServer.App.NetWork.Tcp;
+﻿using Microsoft.Extensions.Logging;
+using RtsServer.App.NetWork.Tcp;
 using RtsServer.App.NetWorkDto.Response;
 
 namespace RtsServer.App.NetWorkHandlers.Game
 {
-    public class SetTargetUnitsProcessor : IProcessor
+    public class SetAttackTargetUnitsProcessor : IProcessor
     {
-        public void Handler(MainResponse response, GameServer context, UserClientTcp clientTcp)
+        public void Handler(MainResponse response, GameServer context, UserClientTcp clientTcp, CancellationToken cancellationToken)
         {
             App.Battle.Game? game = context.BattleManager.Games.Find(
                     gameItem =>
@@ -22,14 +23,21 @@ namespace RtsServer.App.NetWorkHandlers.Game
                         return isThisUser;
                     }
                 );
+            using var loggerFactory = LoggerFactory.Create(builder =>
+            {
+                builder.AddConsole();
+                builder.SetMinimumLevel(LogLevel.Debug);
+            });
+
+            var _logger = loggerFactory.CreateLogger<SetAttackTargetUnitsProcessor>();
 
             if (game == null) return;
-            SetTargetUnits setTargetUnitsReq = response.GetBody<SetTargetUnits>();
+            SetAttackTargetUnits setTargetUnitsReq = response.GetBody<SetAttackTargetUnits>();
             setTargetUnitsReq.UnitsIds.ForEach(unitID =>
             {
                 var unit = game.Units[unitID];
                 if (clientTcp.User.Id == unit.PlayerOwner) {
-                    game.Units[unitID].SetTargetPosition(setTargetUnitsReq.Target);
+                    game.Units[unitID].SetAttackTarget(game.Units[setTargetUnitsReq.TargetUnitId]);
                 }
             });
             

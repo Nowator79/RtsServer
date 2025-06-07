@@ -6,10 +6,9 @@ namespace RtsServer.App.NetWorkHandlers.Auth
 {
     public class Ping : IProcessor
     {
-        public void Handler(MainResponse response, GameServer context, UserClientTcp clientTcp)
+        public void Handler(MainResponse response, GameServer context, UserClientTcp clientTcp, CancellationToken cancellationToken)
         {
             clientTcp.UpdatePing();
-
         }
     }
 }

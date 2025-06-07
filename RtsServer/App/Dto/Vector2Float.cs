@@ -1,11 +1,21 @@
-﻿using RtsServer.App.Battle.Navigator;
+﻿using System;
+using System.Runtime.CompilerServices;
 
 namespace RtsServer.App.Battle.Dto
 {
-    public struct Vector2Float
+    public struct Vector2Float : IEquatable<Vector2Float>
     {
         public double X { get; set; }
         public double Y { get; set; }
+
+        public static Vector2Float Zero { get; } = new Vector2Float(0, 0);
+        public static Vector2Float One { get; } = new Vector2Float(1, 1);
+        public static Vector2Float UnitX { get; } = new Vector2Float(1, 0);
+        public static Vector2Float UnitY { get; } = new Vector2Float(0, 1);
+
+        private const double Deg2Rad = Math.PI / 180;
+        private const double Rad2Deg = 180 / Math.PI;
+        private const double Epsilon = 1e-10;
 
         public Vector2Float(double x, double y)
         {
@@ -13,119 +23,139 @@ namespace RtsServer.App.Battle.Dto
             Y = y;
         }
 
-        public Vector2Int ToInt()
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public Vector2Int ToInt() => new Vector2Int((int)Math.Round(X), (int)Math.Round(Y));
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public double Magnitude() => Math.Sqrt(X * X + Y * Y);
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public double SqrMagnitude() => X * X + Y * Y;
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public Vector2Float Normalized()
         {
-            return new Vector2Int(Convert.ToInt32(Math.Round(X)), Convert.ToInt32(Math.Round(Y)));
+            double mag = Magnitude();
+            return mag > Epsilon ? this / mag : Zero;
         }
 
-        public static Vector2Float operator +(Vector2Float counter1, Vector2Float counter2)
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static Vector2Float Lerp(Vector2Float a, Vector2Float b, double t)
         {
-            return new Vector2Float(counter1.X + counter2.X, counter1.Y + counter2.Y);
-        }
-        public static Vector2Float operator -(Vector2Float counter1, Vector2Float counter2)
-        {
-            return new Vector2Float(counter1.X - counter2.X, counter1.Y - counter2.Y);
-        }
-
-        public static bool operator ==(Vector2Float counter1, Vector2Float counter2)
-        {
-            return counter1.X == counter2.X && counter1.Y == counter2.Y;
+            t = Math.Clamp(t, 0, 1);
+            return new Vector2Float(
+                a.X + (b.X - a.X) * t,
+                a.Y + (b.Y - a.Y) * t
+            );
         }
 
-        public static bool operator !=(Vector2Float counter1, Vector2Float counter2)
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static double Dot(Vector2Float a, Vector2Float b) => a.X * b.X + a.Y * b.Y;
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static double Cross(Vector2Float a, Vector2Float b) => a.X * b.Y - a.Y * b.X;
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static double Distance(Vector2Float a, Vector2Float b)
         {
-            return counter1.X != counter2.X || counter1.Y != counter2.Y;
+            double dx = a.X - b.X;
+            double dy = a.Y - b.Y;
+            return Math.Sqrt(dx * dx + dy * dy);
         }
 
-        public static Vector2Float operator *(Vector2Float counter1, double x)
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static double Angle(Vector2Float from, Vector2Float to)
         {
-            return new Vector2Float(counter1.X * x, counter1.Y * x);
+            double denominator = Math.Sqrt(from.SqrMagnitude() * to.SqrMagnitude());
+            if (denominator < Epsilon)
+                return 0;
+
+            double dot = Math.Clamp(Dot(from, to) / denominator, -1, 1);
+            return Math.Acos(dot) * Rad2Deg;
         }
 
-        public static Vector2Float operator /(Vector2Float counter1, double x)
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static Vector2Float Rotate(Vector2Float v, double degrees)
         {
-            return new Vector2Float(counter1.X / x, counter1.Y / x);
-
+            double radians = degrees * Deg2Rad;
+            double cos = Math.Cos(radians);
+            double sin = Math.Sin(radians);
+            return new Vector2Float(
+                v.X * cos - v.Y * sin,
+                v.X * sin + v.Y * cos
+            );
         }
 
-        public Vector2Float Normalize()
-        {
-            double locLength = Distance(new Vector2Float(), this);
-            if (locLength == 0) return new Vector2Float(0, 0);
-            double inv_length = (1 / locLength);
-            Vector2Float result;
-            result = new Vector2Float(X * inv_length, Y * inv_length);
-            return result;
-        }
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static Vector2Float operator +(Vector2Float a, Vector2Float b) =>
+            new Vector2Float(a.X + b.X, a.Y + b.Y);
 
-        public static double operator *(Vector2Float counter1, Vector2Float counter2)
-        {
-            return counter1.X * counter2.X + counter1.Y * counter2.Y;
-        }
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static Vector2Float operator -(Vector2Float a, Vector2Float b) =>
+            new Vector2Float(a.X - b.X, a.Y - b.Y);
 
-        public static double AngleByVecotrs(Vector2Float counter1, Vector2Float counter2)
-        {
-            Vector2Float x = counter1.Normalize();
-            Vector2Float y = counter2.Normalize();
-            double p = x * y;
-            double radian = Math.Acos(p);
-            double gradus = (radian * 180) / Math.PI;
-            return gradus;
-        }
-        public static double AngleByVectorsAndRot(Vector2Float G, Vector2Float GV, Vector2Float T)
-        {
-            Vector2Float GtoH = T - G;
-            double angle = AngleByVecotrs(GV, GtoH);
-            return angle;
-        }
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static Vector2Float operator *(Vector2Float a, double d) =>
+            new Vector2Float(a.X * d, a.Y * d);
 
-        public static double DistanceSQRT(Vector2Float start, Vector2Float end)
-        {
-            return (Math.Pow(end.X - start.X, 2) + Math.Pow(end.Y - start.Y, 2));
-        }
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static Vector2Float operator *(double d, Vector2Float a) =>
+            new Vector2Float(a.X * d, a.Y * d);
 
-        public static double Distance(Vector2Float start, Vector2Float end)
-        {
-            return Math.Sqrt(DistanceSQRT(start, end));
-        }
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static Vector2Float operator /(Vector2Float a, double d) =>
+            new Vector2Float(a.X / d, a.Y / d);
 
-        public static double SideByVector(Vector2Float P1, Vector2Float P2, Vector2Float P3)
-        {
-            double r = (P3.X - P1.X) * (P2.Y - P1.Y) - (P3.Y - P1.Y) * (P2.X - P1.X);
-            if (r > 0)
-            {
-                return 1;
-            }
-            else if (r < 0)
-            {
-                return -1;
-            }
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static bool operator ==(Vector2Float left, Vector2Float right) =>
+            left.Equals(right);
 
-            return 0;
-        }
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static bool operator !=(Vector2Float left, Vector2Float right) =>
+            !left.Equals(right);
 
-        public static Vector2Float VectorByVectorAndAngle(Vector2Float position, double rotation)
-        {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public bool Equals(Vector2Float other) =>
+            Math.Abs(X - other.X) < Epsilon &&
+            Math.Abs(Y - other.Y) < Epsilon;
 
-            return VectorByAngle(rotation) + position;
-        }
+        public override bool Equals(object obj) => obj is Vector2Float other && Equals(other);
 
-        public static Vector2Float VectorByAngle(double rotation)
-        {
-            double X = Math.Cos(ToRad(rotation));
-            double Y = Math.Sin(ToRad(rotation));
-            return new Vector2Float((float)X, (float)Y);
-        }
+        public override int GetHashCode() => HashCode.Combine(X, Y);
 
-        public static double ToGrad(double rad)
-        {
-            return (rad * 180) / Math.PI;
-        }
+        public override string ToString() => $"({X:F2}, {Y:F2})";
 
-        public static double ToRad(double grad)
-        {
-            return (grad * Math.PI) / 180;
-        }
+        // Методы для обратной совместимости
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public Vector2Float Normalize() => Normalized();
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static double AngleByVecotrs(Vector2Float a, Vector2Float b) => Angle(a, b);
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static double AngleByVectorsAndRot(Vector2Float g, Vector2Float gv, Vector2Float t) =>
+            Angle(gv, t - g);
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static double DistanceSQRT(Vector2Float a, Vector2Float b) =>
+            (a.X - b.X) * (a.X - b.X) + (a.Y - b.Y) * (a.Y - b.Y);
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static double SideByVector(Vector2Float p1, Vector2Float p2, Vector2Float p3) =>
+            Math.Sign(Cross(p2 - p1, p3 - p1));
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static Vector2Float VectorByVectorAndAngle(Vector2Float pos, double angle) =>
+            Rotate(UnitX, angle) + pos;
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static Vector2Float VectorByAngle(double angle) =>
+            Rotate(UnitX, angle);
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static double ToGrad(double rad) => rad * Rad2Deg;
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static double ToRad(double grad) => grad * Deg2Rad;
     }
-
 }

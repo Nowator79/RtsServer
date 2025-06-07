@@ -6,7 +6,7 @@ namespace RtsServer.App.NetWorkHandlers.Game.Battle
 {
     public class BattleAddQueue : IProcessor
     {
-        public void Handler(MainResponse response, GameServer context, UserClientTcp clientTcp)
+        public void Handler(MainResponse response, GameServer context, UserClientTcp clientTcp, CancellationToken cancellationToken)
         {
             clientTcp.User.Status.SetInSearch();
             context.BattleManager.AddUserForSearch(clientTcp.User);

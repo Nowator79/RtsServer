@@ -3,6 +3,7 @@ using RtsServer.App.NetWorkDto.Response;
 using RtsServer.App.NetWorkHandlers.Auth;
 using RtsServer.App.NetWorkHandlers.Game;
 using RtsServer.App.NetWorkHandlers.Game.Battle;
+using RtsServer.App.NetWorkHandlers.Game.Chat;
 
 namespace RtsServer.App.NetWorkHandlers
 {
@@ -23,17 +24,21 @@ namespace RtsServer.App.NetWorkHandlers
                 {"/gameBattle/get/", new GetGameForUser() },
                 {"/gameBattle/setChunk/", new SetChunkProcessor() },
                 {"/gameBattle/unitSetTarget/", new SetTargetUnitsProcessor() },
+                {"/gameBattle/unitSetTarget/attack/", new SetAttackTargetUnitsProcessor() },
+                {"/chat/open/", new Open() },
+                {"/chat/send/", new SendMessage() },
+                
             };
         }
         public void AddProcessor(string action, IProcessor processor)
         {
             processorsAll.Add(action, processor);
         }
-        public void Do(MainResponse mainResponse, UserClientTcp clientTcp)
+        public void Do(MainResponse mainResponse, UserClientTcp clientTcp, CancellationToken cancellationToken)
         {
-            if (processorsAll[mainResponse.action] != null)
+            if (processorsAll[mainResponse.Action] != null)
             {
-                processorsAll[mainResponse.action].Handler(mainResponse, gameServer, clientTcp);
+                processorsAll[mainResponse.Action].Handler(mainResponse, gameServer, clientTcp, cancellationToken);
             }
         }
         public void SetContext(GameServer gameServer)

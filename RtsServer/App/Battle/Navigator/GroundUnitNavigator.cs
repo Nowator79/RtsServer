@@ -1,5 +1,5 @@
 ﻿using RtsServer.App.Battle.Dto;
-using RtsServer.App.Battle.MapButlle;
+using RtsServer.App.Battle.MapBattle;
 using RtsServer.App.Battle.Units;
 using RtsServer.App.FileSystem.Dto;
 using RtsServer.App.NetWorkDto;
@@ -24,16 +24,16 @@ namespace RtsServer.App.Battle.Navigator
             return this;
         }
 
-        public void Start()
+        public async void Start()
         {
             /// пока блокируем перемещние на водные клетки, потом надо 
             /// будет сделать функцию ближайшей доступной точки на суше
             if (Map.GetArrayMap()[Unit.TargetPosition.X, Unit.TargetPosition.Y].Id == 0) return;
 
             // чистим буффер
-            if (Unit.PathRout != null)
+            if (Unit.PathRoute != null)
             {
-                Unit.PathRout.Clear();
+                Unit.PathRoute.Clear();
             }
 
             Vector2Int curPosition = Unit.Position.ToInt();
@@ -43,7 +43,7 @@ namespace RtsServer.App.Battle.Navigator
             // выставляем результат функции поиска пути волной 
             if (!navWave.IsFail)
             {
-                Unit.SetRouts(navWave.GetRoutPath().ToHashSet());
+                await Unit.UpdatePathRouteAsync(navWave.GetRoutePath().ToHashSet());
             }
         }
     }

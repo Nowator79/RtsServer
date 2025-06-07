@@ -5,11 +5,11 @@ using System.Text.Json;
 
 namespace RtsServer.App.NetWorkResponseSender
 {
-    public class CurUserDataSender : NetWorkSenderBase
+    public class SendAllChatSender : NetWorkSenderBase
     {
-        public CurUserDataSender(UserClientTcp clientApi) : base(clientApi)
+        public SendAllChatSender(UserClientTcp clientApi) : base(clientApi)
         {
-            _response = new("auth", "/auth/setCurUser/", "", "200");
+            _response = new("chat", "/chat/init/", "", "200");
         }
 
         public override NetWorkSenderBase SetDate(object data)

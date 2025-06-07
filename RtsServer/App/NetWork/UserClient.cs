@@ -1,137 +1,178 @@
-﻿using RtsServer.App.DataBase.Dto;
-using RtsServer.App.NetWorkDto.Response;
+﻿using System;
+using System.Collections.Concurrent;
 using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
+using System.Threading;
+using System.Threading.Tasks;
+using Microsoft.Extensions.Logging;
+using RtsServer.App.DataBase.Dto;
+using RtsServer.App.NetWorkDto.Response;
 
 namespace RtsServer.App.NetWork.Tcp
 {
-    public class UserClientTcp
+    public sealed class UserClientTcp : IDisposable
     {
+        private readonly ILogger<UserClientTcp> _logger;
+        private readonly INetWorkServer _server;
+        private readonly CancellationTokenSource _cts = new();
+        private bool _disposed;
+
         public string Id { get; }
-
-        public readonly TcpClient TcpClient;
-        public readonly NetworkStream Stream;
-        private readonly INetWorkServer server;
-
+        public TcpClient TcpClient { get; }
+        public NetworkStream Stream { get; }
+        public UserAuth? User { get; private set; }
         public long LastPing { get; private set; }
+        public int CountWrite { get; private set; }
+        public int CountRead { get; private set; }
 
-        public int CountWrite { get; private set; } = 0;
-
-        public int CountRead { get; private set; } = 0;
-
-        public UserAuth User { get; private set; }
-        protected bool _isDisconnect { get; set; } = false;
-
-        public void SetUser(UserAuth User)
-        {
-            this.User = User;
-        }
         public UserClientTcp(TcpClient tcpClient, INetWorkServer netWorkServer)
         {
-            Id = "";
-            TcpClient = tcpClient;
+            TcpClient = tcpClient ?? throw new ArgumentNullException(nameof(tcpClient));
             Stream = tcpClient.GetStream();
-            System.Net.EndPoint? remoteEndPoint = tcpClient.Client.RemoteEndPoint;
-            if (remoteEndPoint == null) return;
+            _server = netWorkServer ?? throw new ArgumentNullException(nameof(netWorkServer));
 
-            string? newId = remoteEndPoint.ToString();
+            using var loggerFactory = LoggerFactory.Create(builder =>
+            {
+                builder.AddConsole();
+                builder.SetMinimumLevel(LogLevel.Debug);
+            });
 
-            if (newId == null) return;
+            _logger = loggerFactory.CreateLogger<UserClientTcp>();
 
-            Id = newId;
-            server = netWorkServer;
-
+            Id = tcpClient.Client.RemoteEndPoint?.ToString() ?? Guid.NewGuid().ToString();
             UpdatePing();
+
+            _logger.LogInformation("Клиент {ClientId} подключен", Id);
         }
 
-        public void Listen()
+        public void SetUser(UserAuth user) => User = user;
+
+        public async Task ListenAsync(CancellationToken cancellationToken)
         {
             try
             {
-                while (true)
+                using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(
+                    cancellationToken,
+                    _cts.Token
+                );
+
+                while (!linkedCts.Token.IsCancellationRequested)
                 {
-                    MainResponse mainResponse = Read();
-                    server.GetProcessor().Handler(mainResponse, this);  // event write client
+                    var response = await ReadAsync(linkedCts.Token).ConfigureAwait(false);
+                    _server.GetProcessor().Handler(response, this, cancellationToken);
                 }
             }
-            catch(Exception ex) 
+            catch (OperationCanceledException)
             {
-                Console.WriteLine(ex.Message);
-                Disconnect();
+                _logger.LogInformation("Клиент {ClientId}: обработка остановлена", Id);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Клиент {ClientId}: ошибка обработки", Id);
+            }
+            finally
+            {
+                Dispose();
             }
         }
 
-        public void Disconnect()
+        public async Task<MainResponse> ReadAsync(CancellationToken cancellationToken)
         {
-            Console.WriteLine($"Клиент {Id} отключился");
-            _isDisconnect = true;
-            server.DisconectUser(this);
-        }
+            using var reader = new StreamReader(Stream, Encoding.UTF8, leaveOpen: true);
+            string? jsonLine;
 
-
-        public MainResponse Read()
-        {
-            byte[] r = Array.Empty<byte>();
-            List<byte> response = new();
-            MainResponse? mainResponse;
-            CountRead++;
-            int bytesRead;
-
-            while (!_isDisconnect)
+            while ((jsonLine = await reader.ReadLineAsync()) != null)
             {
-                if (Stream.CanRead && !_isDisconnect)
+                try
                 {
-                    while ((bytesRead = Stream.ReadByte()) != '\n' && !_isDisconnect)
+                    var response = JsonSerializer.Deserialize<MainResponse>(jsonLine);
+                    if (response != null)
                     {
-                        r = r.Append((byte)bytesRead).ToArray();
-                        response.Add((byte)bytesRead);
+                        if (response.Action == "/gameBattle/unitSetTarget/")
+                            _logger.LogDebug("Получено: {Json}", jsonLine);
+                        return response;
                     }
-                    if (_isDisconnect)
-                    {
-                        throw new Exception("Выход из чтения");
-                    }
-                    string word = Encoding.UTF8.GetString(response.ToArray());
-                    Stream.Flush();
-
-                    mainResponse = JsonSerializer.Deserialize<MainResponse>(word);
-
-                    if (ConfigGameServer.IsDebugNetWork)
-                    {
-                        Console.WriteLine($"Get {word}");
-                    }
-
-                    //return new MainResponse("getMap", "/gameBattle/get/", "200");
-                    if (mainResponse == null) throw new Exception("Ответ не в JSON");
-                    return mainResponse;
                 }
-                Thread.Sleep(100);
+                catch (JsonException ex)
+                {
+                    _logger.LogWarning(ex, "Ошибка парсинга: {Data}", jsonLine);
+                    throw;
+                }
             }
-            throw new Exception("Выход из чтения");
+
+            throw new IOException("Соединение закрыто");
         }
 
-        public async void Write(MainResponse response)
+        public async Task WriteAsync(MainResponse response, CancellationToken cancellationToken)
         {
-            string request = JsonSerializer.Serialize(response);
-            if (ConfigGameServer.IsDebugNetWork)
-            {
-                Console.WriteLine($"Send {request}");
-            }
-            request += '\n';
-            await Stream.WriteAsync(Encoding.UTF8.GetBytes(request));
+            if (response == null)
+                throw new ArgumentNullException(nameof(response));
+
+            string json = JsonSerializer.Serialize(response) + "\n";
+            byte[] bytes = Encoding.UTF8.GetBytes(json);
+
+            await Stream.WriteAsync(bytes, 0, bytes.Length, cancellationToken)
+                .ConfigureAwait(false);
+
             CountWrite++;
+
+            if (ConfigGameServer.IsDebugNetWork)
+                _logger.LogDebug("Отправлено {ClientId}: {Data}", Id, json.Trim());
         }
 
-        public void UpdatePing()
+        public void UpdatePing() => LastPing = DateTime.UtcNow.Ticks;
+
+        public void Dispose()
         {
-            LastPing = DateTime.Now.Ticks;
+            if (_disposed) return;
+            _disposed = true;
+
+            _logger.LogInformation("Клиент {ClientId}: отключение", Id);
+
+            _cts.Cancel();
+
+            try
+            {
+                Stream?.Dispose();
+                TcpClient?.Dispose();
+                _server.DisconnectUser(this);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Клиент {ClientId}: ошибка при освобождении ресурсов", Id);
+            }
+            finally
+            {
+                _cts.Dispose();
+                _logger.LogInformation("Клиент {ClientId}: ресурсы освобождены", Id);
+            }
         }
 
-        public bool IsConnectPing()
+        public bool IsConnected()
         {
-            double timeDef = (new TimeSpan(LastPing)).TotalSeconds - (new TimeSpan(DateTime.Now.Ticks)).TotalSeconds;
-            return timeDef > -5;
-        }
+            if (_disposed || !TcpClient.Connected)
+                return false;
 
+            // Проверка пинга (5 секунд - максимальный допустимый интервал)
+            TimeSpan timeSinceLastPing = DateTime.UtcNow - new DateTime(LastPing);
+            bool isPingValid = timeSinceLastPing.TotalSeconds <= 5;
+
+            // Дополнительная проверка состояния сокета
+            bool isSocketAlive = false;
+            try
+            {
+                // Быстрая проверка без блокировки
+                isSocketAlive = !(TcpClient.Client.Poll(0, SelectMode.SelectRead) &&
+                                 TcpClient.Client.Available == 0);
+            }
+            catch
+            {
+                // Если возникла ошибка - сокет мертв
+                return false;
+            }
+
+            return isPingValid && isSocketAlive;
+        }
     }
 }

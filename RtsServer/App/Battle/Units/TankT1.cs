@@ -1,4 +1,5 @@
 ﻿using RtsServer.App.Battle.Dto;
+using RtsServer.App.Battle.Units.AttackingPoint;
 
 namespace RtsServer.App.Battle.Units
 {
@@ -6,13 +7,19 @@ namespace RtsServer.App.Battle.Units
     {
         public TankT1(Vector2Float position, int playerOwner) : base("TankT1", new(2000), position, playerOwner)
         {
-            Speed = 70;
-            RotationSpeed = 100;
+            InitParameters();
+
         }
-        public TankT1(Vector2Int position, int playerOwner) : base("TankT1", new(2000), position, playerOwner)
+        public TankT1(Vector2Int position, int playerOwner) : base("TankT1", new(2000), position.GetFloat(), playerOwner)
         {
-            Speed = 70;
+            InitParameters();
+        }
+        private void InitParameters()
+        {
+            MaxSpeed = 1;
             RotationSpeed = 100;
+            AccelerationForce = 20;
+            AttackingPoints = [new TankTower(this)];
         }
     }
 }

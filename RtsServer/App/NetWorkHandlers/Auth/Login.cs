@@ -9,7 +9,7 @@ namespace RtsServer.App.NetWorkHandlers.Auth
 {
     public class Login : IProcessor
     {
-        public void Handler(MainResponse response, GameServer context, UserClientTcp clientTcp)
+        public void Handler(MainResponse response, GameServer context, UserClientTcp clientTcp, CancellationToken cancellationToken)
         {
             NUser? userAuth = response.GetBody<NUser>();
             if (userAuth != null)

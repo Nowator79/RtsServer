@@ -1,4 +1,4 @@
-﻿using RtsServer.App.Battle.MapButlle;
+﻿using RtsServer.App.Battle.MapBattle;
 using RtsServer.App.DataBase.Dto;
 using RtsServer.App.NetWork.Tcp;
 using System.Text;

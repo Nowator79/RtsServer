@@ -3,11 +3,11 @@ using System.Text.Json;
 
 namespace RtsServer.App.NetWorkResponseSender
 {
-    public class UnitPathNavSender : NetWorkSenderBase
+    public class UnitInfoSender : NetWorkSenderBase
     {
-        public UnitPathNavSender(UserClientTcp clientApi) : base(clientApi)
+        public UnitInfoSender(UserClientTcp clientApi) : base(clientApi)
         {
-            _response = new("battle", "/gameBattle/unitPathNav/", "", "200");
+            _response = new("gameBattle", "/gameBattle/unit/info/", "", "200");
         }
 
         public override NetWorkSenderBase SetDate(object data)

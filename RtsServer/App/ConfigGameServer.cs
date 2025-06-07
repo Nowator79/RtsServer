@@ -9,13 +9,13 @@
         // Показывать логи расчета навигации
         public const bool IsDebugGameNavUpdate = false;
         public const bool IsDebugGameUsersInfoUpdate = false;
-        public const bool IsDebugStartGame = true;
         public const bool IsDebugTimeUpdate = false;
         // Проверка статуса чанков
         public const bool IsDebugChunkStatus = false;
         
         public const bool IsEnabledClearConsole = false;
 
+        // Запустить одиночный тестовый
         public const bool IsTestBattle = true;
     }
 }

@@ -1,4 +1,4 @@
-﻿using RtsServer.App.Battle.MapButlle;
+﻿using RtsServer.App.Battle.MapBattle;
 
 namespace RtsServer.App.ViewConsole
 {

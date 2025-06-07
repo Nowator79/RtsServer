@@ -1,16 +1,15 @@
 using RtsServer.App.Battle.Dto;
 
-public class SetTargetUnits
+public class SetAttackTargetUnits
 {
     public List<int> UnitsIds { get; set; }
-    public Vector2Int Target { get; set; }
+    public int TargetUnitId { get; set; }
     public int TypeTarget { get; set; }
 
-
-    public SetTargetUnits(List<int> UnitsIds, Vector2Int Target, int TypeTarget)
+    public SetAttackTargetUnits(List<int> UnitsIds, int TargetUnitId, int TypeTarget)
     {
         this.UnitsIds = UnitsIds;
-        this.Target = Target;
+        this.TargetUnitId = TargetUnitId;
         this.TypeTarget = TypeTarget;
     }
 }

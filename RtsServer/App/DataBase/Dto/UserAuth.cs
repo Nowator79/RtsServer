@@ -10,14 +10,18 @@ namespace RtsServer.App.DataBase.Dto
             Password = password;
             Credits = 0;
             TechCredits = 0;
+            Experience = 0;
+            Level = 0;
         }
 
-        public UserAuth(string userName, string password, int Credits, int TechCredits)
+        public UserAuth(string userName, string password, int Credits, int TechCredits, int Experience, int Level)
         {
             UserName = userName;
             Password = password;
             this.Credits = Credits;
             this.TechCredits = TechCredits;
+            this.Experience = Experience;
+            this.Level = Level;
         }
 
         public int Id { get; set; }
@@ -25,6 +29,8 @@ namespace RtsServer.App.DataBase.Dto
         public string Password { get; set; }
         public int Credits { get; set; }
         public int TechCredits { get; set; }
+        public int Experience { get; set; }
+        public int Level { get; set; }
 
         public StatusUser Status;
     }

@@ -1,5 +1,6 @@
 ﻿using RtsServer.App.Exceptions;
 using RtsServer.App.NetWork.Tcp;
+using System.Text.Json;
 
 namespace RtsServer.App.NetWorkResponseSender
 {
@@ -7,7 +8,7 @@ namespace RtsServer.App.NetWorkResponseSender
     {
         public EndGameSender(UserClientTcp clientApi) : base(clientApi)
         {
-            response = new("battle", "/gameBattle/endGame/", "200");
+            _response = new("battle", "/gameBattle/endGame/", "", "200");
         }
 
         public override NetWorkSenderBase SetDate(object data)

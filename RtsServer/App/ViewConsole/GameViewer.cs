@@ -50,7 +50,7 @@ namespace RtsServer.App.ViewConsole
             {
                 game.Units.ForEach(unit =>
                 {
-                    foreach (Battle.Dto.Vector2Int point in unit.PathRout)
+                    foreach (Battle.Dto.Vector2Int point in unit.PathRoute)
                     {
                         viewConsoleArray[point.X, point.Y] = '?';
                     }

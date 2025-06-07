@@ -1,7 +1,7 @@
-﻿using RtsServer.App.Battle.MapButlle.ChunksType;
+﻿using RtsServer.App.Battle.MapBattle.ChunksType;
 using RtsServer.App.FileSystem.Dto;
 
-namespace RtsServer.App.Battle.MapButlle
+namespace RtsServer.App.Battle.MapBattle
 {
     public class Map
     {

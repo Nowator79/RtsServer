@@ -1,15 +1,16 @@
 ﻿using RtsServer.App.NetWork.Tcp;
 using RtsServer.App.NetWorkDto.Response;
 using System.Linq;
+using System.Text.Json;
 
 namespace RtsServer.App.NetWorkHandlers.Game
 {
     public class GetGameForUser : IProcessor
     {  
-        public void Handler(MainResponse response, GameServer context, UserClientTcp clientTcp)
+        public async void Handler(MainResponse response, GameServer context, UserClientTcp clientTcp, CancellationToken cancellationToken = default)
         {
 
-            MainResponse responseGame = new(response.type, response.action, response.status);
+            MainResponse responseGame = new(response.Type, response.Action, "", response.Status);
             App.Battle.Game? game = context.BattleManager.Games.Find(
                     gameItem =>
                     {
@@ -26,7 +27,8 @@ namespace RtsServer.App.NetWorkHandlers.Game
 
             responseGame.SetBody(game);
             
-            clientTcp.Write(responseGame);
+            await clientTcp.WriteAsync(responseGame, cancellationToken);
         }
+
     }
 }

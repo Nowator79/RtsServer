@@ -7,7 +7,15 @@ namespace RtsServer.App.Adapters
     {
         public static NUnit Get(Unit unit)
         {
-            return new NUnit(unit.Id, unit.Code, unit.Health.Value, unit.Position, unit.Rotation);
+            NUnit unitRes = new NUnit(unit.Id, unit.Code, unit.Health.Value, unit.Position, unit.Rotation);
+            unitRes.Info = new NUnit.NUnitInfo(unit.MaxSpeed, unit.CurrentSpeed);
+            unitRes.AttackPoints = new NAttackPoint[unit.AttackingPoints.Length];
+            for (int i = 0; i < unit.AttackingPoints.Length; i++)
+            {
+                Battle.Units.AttackingPoint.BaseAttackingPoint attackPoint = unit.AttackingPoints[i];
+                unitRes.AttackPoints[i] = new NAttackPoint(attackPoint.Rotation);
+            }
+            return unitRes;
         }
     }
 }

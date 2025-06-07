@@ -7,7 +7,7 @@ namespace RtsServer.App.NetWork
     public interface INetWorkServer
     {
         public void Run();
-        public void DisconectUser(UserClientTcp userClient);
+        public void DisconnectUser(UserClientTcp userClient);
         public MainProcessor GetProcessor();
         public void Exit();
     }

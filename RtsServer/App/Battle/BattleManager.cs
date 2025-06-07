@@ -1,13 +1,16 @@
-﻿using RtsServer.App.Battle.Chat;
+﻿using Microsoft.Extensions.Logging;
+using RtsServer.App.Battle.Chat;
 using RtsServer.App.Battle.Constructions;
 using RtsServer.App.Battle.MapBattle;
 using RtsServer.App.Battle.Units;
 using RtsServer.App.DataBase.Dto;
+using System.Threading;
 
 namespace RtsServer.App.Battle
 {
     public class BattleManager
     {
+        private readonly ILogger<BattleManager> _logger;
         public List<Game> Games { get; private set; }
         public HashSet<UserAuth> UsersForSearching { get; private set; }
         public GameServer GameServer { get; private set; }
@@ -16,16 +19,25 @@ namespace RtsServer.App.Battle
 
         private readonly string[] MapsForPvp = { "test" };
         private readonly Random rnd = new();
-        public ChatSystem Chat { get; private set; }
+        private CancellationToken _cancellationToken;
 
-        public BattleManager(GameServer gameServer)
+        public BattleManager(GameServer gameServer, CancellationToken cancellationToken)
         {
+            _cancellationToken = cancellationToken;
+
+            using var loggerFactory = LoggerFactory.Create(builder =>
+            {
+                builder.AddConsole();
+                builder.SetMinimumLevel(LogLevel.Debug);
+            });
+
+            _logger = loggerFactory.CreateLogger<BattleManager>();
+
             GameServer = gameServer;
             Games = new();
             UsersForSearching = new();
             MapSceneFactory = new();
             MapScene = new();
-            Chat = new();
         }
 
         public void AddGame(Game Game)
@@ -56,7 +68,7 @@ namespace RtsServer.App.Battle
                 UsersForSearching.Remove(firstUser);
                 UsersForSearching.Remove(secondUser);
 
-                Game game = new(Games.Count, this);
+                Game game = new(Games.Count, this, _cancellationToken);
                 string nameMap = MapsForPvp[rnd.Next(0, MapsForPvp.Length)];
                 List<MapScene> mapScenes = new(MapSceneFactory.GetAllMapScene());
                 MapScene? mapScene = mapScenes.Find(mapScene => mapScene.Map.Code == nameMap);
@@ -69,7 +81,7 @@ namespace RtsServer.App.Battle
 
                 foreach (Unit unit in mapScene.Units)
                 {
-                    unit.SetGame(game);
+                    unit.Init(game);
                     game.AddUnit(unit);
                 }
 
@@ -79,7 +91,7 @@ namespace RtsServer.App.Battle
                     game.AddConstruction(construction);
                 }
 
-                game.Start();
+                game.StartAsync();
 
                 AddGame(game);
             }
@@ -101,7 +113,7 @@ namespace RtsServer.App.Battle
 
                 UsersForSearching.Remove(firstUser);
 
-                Game game = new(Games.Count, this);
+                Game game = new(Games.Count, this, _cancellationToken);
                 string nameMap = MapsForPvp[rnd.Next(0, MapsForPvp.Length)];
                 List<MapScene> mapScenes = new(MapSceneFactory.GetAllMapScene());
                 MapScene? mapScene = mapScenes.Find(mapScene => mapScene.Map.Code == nameMap);
@@ -112,7 +124,7 @@ namespace RtsServer.App.Battle
 
                 foreach (Unit unit in mapScene.Units)
                 {
-                    unit.SetGame(game);
+                    unit.Init(game);
                     game.AddUnit(unit);
                 }
 
@@ -122,7 +134,7 @@ namespace RtsServer.App.Battle
                     game.AddConstruction(construction);
                 }
 
-                game.Start();
+                game.StartAsync();
 
                 AddGame(game);
             }
@@ -152,7 +164,7 @@ namespace RtsServer.App.Battle
             });
             if (game != null)
             {
-                game.End();
+                game.EndAsync();
             }
         }
     }

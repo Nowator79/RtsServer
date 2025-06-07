@@ -7,7 +7,7 @@ namespace RtsServer.App.Adapters
     {
         public static NUser Get(UserAuth user)
         {
-            return new(user.UserName, user.Password, user.Credits, user.TechCredits);
+            return new(user.UserName, user.Password, user.Credits, user.TechCredits, user.Level, user.Experience);
         }
         public static UserAuth Get(NUser user)
         {

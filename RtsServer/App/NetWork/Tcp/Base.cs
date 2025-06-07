@@ -1,89 +1,120 @@
-﻿using RtsServer.App.DataBase.Dto;
+﻿using Microsoft.Extensions.Logging;
+using RtsServer.App.DataBase.Dto;
 using RtsServer.App.NetWorkHandlers;
 using RtsServer.App.NetWorkResponseSender;
+using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Sockets;
 
 /*
  Класс описывает работу сервера TCP
  */
+
 namespace RtsServer.App.NetWork.Tcp
 {
-    public abstract class Base : INetWorkServer
+    public abstract class Base : INetWorkServer, IDisposable
     {
-        protected TcpListener tcpListener;
-        protected int port = 9080;
-        protected MainProcessor processor;
-        protected List<UserClientTcp> users;
-        protected CancellationTokenSource cancellationTokenSource;
+        private readonly TcpListener _tcpListener;
+        private readonly ConcurrentBag<UserClientTcp> _users = new();
+        private readonly CancellationTokenSource _cancellationTokenSource = new();
+        private readonly ILogger<GameServer> _logger;
+        protected readonly MainProcessor _processor;
+        private bool _disposed;
 
-        public List<UserClientTcp> GetUsers()
+        public IEnumerable<UserClientTcp> Users => _users;
+
+        public Base(int port, MainProcessor processor, ILogger<GameServer> logger)
         {
-            return users;
+            _processor = processor;
+            _logger = logger;
+            _tcpListener = new TcpListener(IPAddress.Any, port);
         }
 
-        public Base(int port, MainProcessor processor)
-        {
-            this.port = port;
-            this.processor = processor;
+        public UserClientTcp? GetClientById(string id) =>
+            _users.FirstOrDefault(n => n.Id == id);
 
-            tcpListener = new(IPAddress.Any, port);
+        public UserClientTcp? GetClientByUserAuth(UserAuth user) =>
+            _users.FirstOrDefault(n => n.User == user);
 
-            users = new();
-            cancellationTokenSource = new CancellationTokenSource();
-        }
-
-        private void ProcessClient(TcpClient tcpClient)
-        {
-            UserClientTcp client = new(tcpClient, this);
-            Thread clientListen = new(client.Listen)
-            {
-                Name = "Listener: user" + client.Id
-            };
-            clientListen.Start();
-            users.Add(client);
-        }
-
-        public UserClientTcp? GetClientById(string id) => users.Find(n => n.Id == id);
-        public UserClientTcp? GetClientByUserAuth(UserAuth user) => users.Find(n => n.User == user);
         public void Run()
         {
-            cancellationTokenSource.Token.Register(() => tcpListener.Stop());
-            tcpListener.Start();
+            _tcpListener.Start();
+            _logger.LogInformation("Сервер запущен на порту {Port}. Ожидание подключений...", ((IPEndPoint)_tcpListener.LocalEndpoint).Port);
+
             Task.Run(async () =>
             {
                 try
                 {
-                    Console.WriteLine("Сервер запущен. Ожидание подключений... ");
-
-                    while (true)
+                    while (!_cancellationTokenSource.Token.IsCancellationRequested)
                     {
-                        TcpClient tcpClient = await Task.Run(
-                            tcpListener.AcceptTcpClientAsync,
-                            cancellationTokenSource.Token);
-
-                        ProcessClient(tcpClient);
-
+                        var tcpClient = await _tcpListener.AcceptTcpClientAsync(_cancellationTokenSource.Token);
+                        _ = ProcessClientAsync(tcpClient);
                     }
                 }
-                finally
+                catch (OperationCanceledException)
                 {
-                    tcpListener.Stop();
-                    Console.WriteLine("Tcp Server is stoped");
+                    _logger.LogInformation("Работа сервера остановлена по запросу.");
                 }
-            });
-           
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Критическая ошибка в работе сервера");
+                }
+            }, _cancellationTokenSource.Token);
         }
-        public void DisconectUser(UserClientTcp userClient)
-        {
 
-            users.Remove(userClient);
+        private async Task ProcessClientAsync(TcpClient tcpClient)
+        {
+            try
+            {
+                var client = new UserClientTcp(tcpClient, this);
+                _users.Add(client);
+                _logger.LogInformation("Клиент {ClientId} подключен.", client.Id);
+                await client.ListenAsync(_cancellationTokenSource.Token);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Ошибка обработки клиента");
+                tcpClient.Dispose();
+            }
+            finally
+            {
+                _logger.LogInformation("Клиент отключен.");
+            }
         }
+
+        public void DisconnectUser(UserClientTcp userClient)
+        {
+            if (userClient == null) return;
+
+            userClient.Dispose();
+            _users.TryTake(out _);
+            _logger.LogInformation("Клиент {ClientId} отключен.", userClient.Id);
+        }
+
         public void Exit()
         {
-            tcpListener.Stop();
-            cancellationTokenSource.Cancel();
+            Dispose();
         }
-        public MainProcessor GetProcessor() => processor;
+
+        public MainProcessor GetProcessor() => _processor;
+
+        public void Dispose()
+        {
+            if (_disposed) return;
+            _disposed = true;
+
+            _logger.LogInformation("Завершение работы сервера...");
+
+            _cancellationTokenSource.Cancel();
+            _tcpListener.Stop();
+
+            foreach (var user in _users)
+            {
+                user.Dispose();
+            }
+
+            _cancellationTokenSource.Dispose();
+            _logger.LogInformation("Сервер остановлен.");
+        }
     }
 }

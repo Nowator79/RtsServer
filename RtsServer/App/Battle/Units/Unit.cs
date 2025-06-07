@@ -1,216 +1,244 @@
-﻿using RtsServer.App.Battle.Dto;
+﻿using Microsoft.Extensions.Logging;
+using RtsServer.App.Battle.Dto;
+using RtsServer.App.Battle.MapBattle.ChunksType;
 using RtsServer.App.Battle.Navigator;
+using RtsServer.App.Battle.Units.AttackingPoint;
 using RtsServer.App.NetWork.Tcp;
 using RtsServer.App.NetWorkDto;
 using RtsServer.App.NetWorkResponseSender;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
 
 namespace RtsServer.App.Battle.Units
 {
-    public class Unit
+    public class Unit : IDisposable
     {
-        /// идентификаторы 
-        public int Id { get; set; }
-        public string Code { get; set; }
-        public int PlayerOwner { get; set; }
-        // состояние здоровья
-        public Health Health { get; set; }
-        // текущая позиция
+        private const double RotationThreshold = 5.0;
+        private const double PositionThreshold = 0.05;
+        private const double SpeedAdjustmentFactor = 1.0;
+        private bool _disposed;
+
+        // Идентификаторы и базовые свойства
+        public int Id { get; private set; }
+        public string Code { get; }
+        public int PlayerOwner { get; }
+        public Health Health { get; }
+
+        // Позиция и движение
         public Vector2Float Position { get; protected set; }
-        // текущая позиция в чанке, нужна для проверки изменения позиции
         public Vector2Int CurChunkPosition { get; protected set; }
-
-        // характеристики
-        public double Speed { get; protected set; } = 1;
-        public double RotationSpeed { get; protected set; }
-
-        // навигация    
         public Vector2Int TargetPosition { get; protected set; }
         public double Rotation { get; protected set; }
-        public HashSet<Vector2Int> PathRout { get; private set; }
-        protected INavigator Navigatior { get; set; }
-        protected Action BeforeUpdateChunkPosition { get; set; }
-        protected Action AfterUpdateChunkPosition { get; set; }
-        // контекст  
-        private Game Game { get; set; }
 
-        protected const int KRotationSpeed = 1;
-        public Unit(string xmlId, Health health, Vector2Float position, int playerOwner)
+        // Характеристики движения
+        public double CurrentSpeed { get; protected set; }
+        public double MaxSpeed { get; protected set; } = 1.0;
+        public double AccelerationForce { get; protected set; }
+        public bool IsMoving { get; protected set; }
+        public double RotationSpeed { get; protected set; }
+
+        // Навигация
+        public HashSet<Vector2Int> PathRoute { get; private set; }
+        protected INavigator Navigator { get; }
+
+        // Атака
+        public BaseAttackingPoint[] AttackingPoints { get; protected set; } = Array.Empty<BaseAttackingPoint>();
+
+        // Контекст
+        public Game Game { get; private set; }
+        public event Action BeforeChunkUpdate;
+        public event Action AfterChunkUpdate;
+        
+        private ILogger<Unit> _logger;
+
+        public Unit(string code, Health health, Vector2Float position, int playerOwner)
         {
-            Code = xmlId;
+            Code = code ?? throw new ArgumentNullException(nameof(code));
             Health = health;
             Position = position;
-            Navigatior = new GroundUnitNavigator();
-            Navigatior.SetUnit(this);
-            Rotation = 0;
             PlayerOwner = playerOwner;
+            Navigator = new GroundUnitNavigator();
+            Navigator.SetUnit(this);
+            TargetPosition = position.ToInt();
+            using var loggerFactory = LoggerFactory.Create(builder =>
+            {
+                builder.AddConsole();
+                builder.SetMinimumLevel(LogLevel.Debug);
+            });
+
+            _logger = loggerFactory.CreateLogger<Unit>();
+            _logger.LogDebug(position.ToString());
         }
 
-        public Unit(string xmlId, Health health, Vector2Int position, int playerOwner)
+        public void Init(Game context)
         {
-            Code = xmlId;
-            Health = health;
-            Position = position.GetFloat();
-            Navigatior = new GroundUnitNavigator();
-            Navigatior.SetUnit(this);
-            Rotation = 0;
-            PlayerOwner = playerOwner;
+            Game = context ?? throw new ArgumentNullException(nameof(context));
+            Navigator.SetMap(Game.Map);
+
+            foreach (var attackPoint in AttackingPoints)
+            {
+                attackPoint.Init();
+            }
         }
 
-        public void SetGame(Game context)
-        {
-            Game = context;
-            Navigatior.SetMap(Game.Map);
-            AfterUpdateChunkPosition += () => {
-              
-            };
-            BeforeUpdateChunkPosition += () => {
-                
-            };
-        }
+        public void SetId(int id) => Id = id;
 
-        public void SetId(int Id)
+        public Unit SetTargetPosition(Vector2Int targetPosition)
         {
-            this.Id = Id;
-        }
-
-        /// <summary>
-        /// Устанавливает цель и просчитывает маршрут до цели
-        /// </summary>
-        /// <param name="TargetPosition"></param>
-        /// <returns></returns>
-        public Unit SetTargetPosition(Vector2Int TargetPosition)
-        {
-            this.TargetPosition = TargetPosition;
+            TargetPosition = targetPosition;
             try
             {
-                Navigatior.Start();
+                Navigator.Start();
             }
-            catch (Exception e)
+            catch (Exception ex)
             {
-                //Console.WriteLine(e);
+                // Логирование ошибки навигации
+                _logger?.LogError(ex, "Navigation error for unit {UnitId}", Id);
             }
             return this;
         }
 
-        /// <summary>
-        /// установить новую точку юнита, юниты у нас не могут телпеортироваться
-        /// потому метод должен использоваться только в MoveToTarget()
-        /// </summary>
-        /// <param name="position"></param>
-        private void SetNewPosition(Vector2Float position)
+        public Unit SetAttackTarget(Unit targetUnit)
         {
-            Position = position;
+            if (targetUnit == null) return this;
+
+            foreach (var attackPoint in AttackingPoints)
+            {
+                attackPoint.SetTarget(targetUnit);
+            }
+            return this;
         }
 
-        /// <summary>
-        /// установить маршрут до цели, используется только навигатором
-        /// </summary>
-        /// <param name="routs"></param>
-        public void SetRouts(HashSet<Vector2Int> routs)
+        public async Task UpdatePathRouteAsync(HashSet<Vector2Int> route)
         {
-            PathRout = routs;
+            PathRoute = route ?? throw new ArgumentNullException(nameof(route));
 
-            foreach (Player player in Game.Players)
+            if (Game?.Players == null) return;
+
+            var tasks = new List<Task>();
+            foreach (var player in Game.Players.Where(p => p.UserAuth != null))
             {
-                UserClientTcp? userTcp = Game.BattleManager.GameServer.TcpServer.GetClientByUserAuth(player.UserAuth);
-
+                var userTcp = Game.BattleManager.GameServer.TcpServer.GetClientByUserAuth(player.UserAuth);
                 if (userTcp != null)
                 {
-                    new UnitPathNavSender(userTcp).SetDate(new NUnitPathNav(Id, routs)).SendMessage();
+                    var sender = new UnitPathNavSender(userTcp);
+                    tasks.Add(sender.SetDate(new NUnitPathNav(Id, route)).SendAsync());
                 }
             }
 
+            await Task.WhenAll(tasks);
         }
 
-        /// <summary>
-        /// Метод с каждой новой итерацией продвигается к ближайшему чанку маршрута
-        /// </summary>
-        public void MoveToTarget()
+        /**
+         * Движения вращения и прочая логика
+         */
+        protected virtual void MoveToTarget()
         {
-            if (PathRout != null && PathRout.Count > 0)
+            if (PathRoute == null || PathRoute.Count == 0)
             {
-                Vector2Int lastTargetPoint = PathRout.Last();
-                Vector2Float targetFloat = lastTargetPoint.GetFloat();
-
-                // проверяем последнию точку навигации, если достгли ее то
-                // уравниваем позицию цели к точке навигации и удаляем точку навигации
-                if (Vector2Float.Distance(Position, targetFloat) < 0.05)
-                {
-                    SetNewPosition(targetFloat);
-                    PathRout.Remove(lastTargetPoint);
-                    return;
-                }
-
-                // Поворачиваемся до цели если поворот правильный идем к цели
-                if (RotationToTarget(targetFloat))
-                {
-                    double dTime = Game.TimeSystem.GetDelta();
-                    Vector2Float newPosition = Position + (targetFloat - Position).Normalize() * Speed * dTime / 100;
-                    if (Vector2Float.DistanceSQRT(Position, newPosition) >= Vector2Float.DistanceSQRT(Position, targetFloat))
-                    {
-                        newPosition = targetFloat;
-                    }
-                    SetNewPosition(newPosition);
-                }
-
+                IsMoving = false;
+                CurrentSpeed = 0;
+                return;
             }
+
+            IsMoving = true;
+            var deltaTime = Game.TimeSystem.GetDelta();
+            var lastPoint = PathRoute.Last();
+            var targetPosition = lastPoint.GetFloat();
+
+            if (Vector2Float.Distance(Position, targetPosition) < PositionThreshold)
+            {
+                Position = targetPosition;
+                PathRoute.Remove(lastPoint);
+                return;
+            }
+
+            if (RotateTowards(targetPosition))
+            {
+                var direction = (targetPosition - Position).Normalize();
+                var newPosition = Position + direction * CurrentSpeed * deltaTime;
+
+                if (Vector2Float.DistanceSQRT(Position, newPosition) >= Vector2Float.DistanceSQRT(Position, targetPosition))
+                {
+                    newPosition = targetPosition;
+                }
+
+                Position = newPosition;
+            }
+
+            UpdateSpeed(deltaTime);
         }
 
-        public bool RotationToTarget(Vector2Float Target)
+        private bool RotateTowards(Vector2Float target)
         {
-            Vector2Float GFacting = Vector2Float.VectorByVectorAndAngle(Position, -Rotation);// глобальная точка
-            Vector2Float GFactingC = Vector2Float.VectorByAngle(-Rotation); // локальная точка
-            double AngleToTarget = Vector2Float.AngleByVectorsAndRot(Position, GFactingC.Normalize(), Target);
-            double typeAngle = Vector2Float.SideByVector(Position, GFacting, Target);
+            var globalFacing = Vector2Float.VectorByAngle(-Rotation).Normalize();
+            var angleToTarget = Vector2Float.AngleByVecotrs(globalFacing, (target - Position).Normalize());
+            var rotationDirection = Math.Sign(Vector2Float.Cross(globalFacing, (target - Position).Normalize()));
 
-            double dTime = Game.TimeSystem.GetDelta();
-            double upAngle = RotationSpeed * KRotationSpeed * dTime;
-            double newAngle = Rotation;
-            if (upAngle > AngleToTarget) upAngle = AngleToTarget;
-            if (typeAngle > 0)
-            {
-                newAngle = Rotation + upAngle;
-            }
-            else if (typeAngle < 0)
-            {
-                newAngle = Rotation - upAngle;
-            }
+            var deltaTime = Game.TimeSystem.GetDelta();
+            var rotationStep = RotationSpeed * SpeedAdjustmentFactor * deltaTime;
 
-            if (Math.Abs(newAngle - Rotation) > 30)
-            {
-                Console.WriteLine("ERROR");
-            }
-            Rotation = newAngle;
+            Rotation += -rotationDirection * Math.Min(rotationStep, angleToTarget);
 
-            if (AngleToTarget % 180 < 5 || double.IsNaN(0 / AngleToTarget))
+            return angleToTarget % 180 < RotationThreshold || double.IsNaN(angleToTarget);
+        }
+
+        private void UpdateSpeed(double deltaTime)
+        {
+            if (IsMoving)
             {
-                return true;
+                CurrentSpeed = Math.Min(CurrentSpeed + AccelerationForce * deltaTime, MaxSpeed);
             }
             else
             {
-                return false;
+                CurrentSpeed = 0;
             }
         }
-        
-        private void CheckChunk()
+
+        private void UpdateChunkPosition()
         {
-            if(CurChunkPosition != Position.ToInt())
-            {
-                MapButlle.ChunksType.ChunkBase tmp = Game.Map.GetArrayMap()[CurChunkPosition.X, CurChunkPosition.Y];
-                tmp.UnitsInPoint.Remove(this);
+            var newChunkPosition = Position.ToInt();
+            if (CurChunkPosition == newChunkPosition) return;
 
-                CurChunkPosition = Position.ToInt();
+            BeforeChunkUpdate?.Invoke();
 
-                MapButlle.ChunksType.ChunkBase tmp2 = Game.Map.GetArrayMap()[CurChunkPosition.X, CurChunkPosition.Y];
-                tmp2.UnitsInPoint.Add(this);
+            var map = Game.Map.GetArrayMap();
+            map[CurChunkPosition.X, CurChunkPosition.Y].UnitsInPoint.Remove(this);
+            CurChunkPosition = newChunkPosition;
+            map[CurChunkPosition.X, CurChunkPosition.Y].UnitsInPoint.Add(this);
 
-            }
+            AfterChunkUpdate?.Invoke();
         }
 
         public void Update()
         {
+            foreach (var attackPoint in AttackingPoints)
+            {
+                attackPoint.Update();
+            }
+
             MoveToTarget();
-            CheckChunk();
+            UpdateChunkPosition();
+        }
+
+        public void Dispose()
+        {
+            if (_disposed) return;
+            _disposed = true;
+
+            if (Game?.Map != null && Game.Map.GetArrayMap() is var map &&
+                CurChunkPosition.X >= 0 && CurChunkPosition.X < map.GetLength(0) &&
+                CurChunkPosition.Y >= 0 && CurChunkPosition.Y < map.GetLength(1))
+            {
+                map[CurChunkPosition.X, CurChunkPosition.Y].UnitsInPoint.Remove(this);
+            }
+
+            foreach (var attackPoint in AttackingPoints)
+            {
+                (attackPoint as IDisposable)?.Dispose();
+            }
         }
     }
 }

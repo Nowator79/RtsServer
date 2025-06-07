@@ -5,6 +5,6 @@ namespace RtsServer.App.NetWorkHandlers
 {
     public interface IProcessor
     {
-        public void Handler(MainResponse response, GameServer context, UserClientTcp clientTcp);
+        public void Handler(MainResponse response, GameServer context, UserClientTcp clientTcp, CancellationToken cancellationToken);
     }
 }

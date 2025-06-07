@@ -24,8 +24,14 @@ namespace RtsServer.App.DataBase.Db
             UserAuth? user = Users.Find(e => e.UserName == login);
             return user;
         }
+
+        /// <summary>
+        /// Пока не использовать, не работает как надо
+        /// </summary>
+        /// <returns></returns>
         public List<UserAuth> GetAll()
         {
+            throw new Exception("Не использовать");
             return Users;
         }
     }
