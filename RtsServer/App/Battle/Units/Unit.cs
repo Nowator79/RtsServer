@@ -1,80 +1,61 @@
 ﻿using Microsoft.Extensions.Logging;
 using RtsServer.App.Battle.Dto;
-using RtsServer.App.Battle.MapBattle.ChunksType;
+using RtsServer.App.Battle.MapBattle;
 using RtsServer.App.Battle.Navigator;
 using RtsServer.App.Battle.Units.AttackingPoint;
 using RtsServer.App.NetWork.Tcp;
 using RtsServer.App.NetWorkDto;
 using RtsServer.App.NetWorkResponseSender;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
 
 namespace RtsServer.App.Battle.Units
 {
-    public class Unit : IDisposable
+    public abstract class Unit : BattleEntity
     {
         private const double RotationThreshold = 5.0;
         private const double PositionThreshold = 0.05;
         private const double SpeedAdjustmentFactor = 1.0;
-        private bool _disposed;
 
-        // Идентификаторы и базовые свойства
-        public int Id { get; private set; }
-        public string Code { get; }
-        public int PlayerOwner { get; }
         public Health Health { get; }
-
-        // Позиция и движение
-        public Vector2Float Position { get; protected set; }
         public Vector2Int CurChunkPosition { get; protected set; }
         public Vector2Int TargetPosition { get; protected set; }
         public double Rotation { get; protected set; }
 
-        // Характеристики движения
         public double CurrentSpeed { get; protected set; }
         public double MaxSpeed { get; protected set; } = 1.0;
         public double AccelerationForce { get; protected set; }
         public bool IsMoving { get; protected set; }
         public double RotationSpeed { get; protected set; }
-
-        // Навигация
-        public HashSet<Vector2Int> PathRoute { get; private set; }
+        public void SetId(int id) => Id = id;
+        public Queue<Vector2Int> PathRoute { get; private set; }
         protected INavigator Navigator { get; }
 
-        // Атака
         public BaseAttackingPoint[] AttackingPoints { get; protected set; } = Array.Empty<BaseAttackingPoint>();
-
-        // Контекст
-        public Game Game { get; private set; }
         public event Action BeforeChunkUpdate;
         public event Action AfterChunkUpdate;
-        
-        private ILogger<Unit> _logger;
 
-        public Unit(string code, Health health, Vector2Float position, int playerOwner)
+        private Vector2Int? targetPoint;
+        private ILogger<Unit> _logger;
+        private bool _disposed;
+
+        public Unit(string code, int health, int maxHealth, Vector2Float position, int playerOwner)
+            : base(code, playerOwner, position)
         {
-            Code = code ?? throw new ArgumentNullException(nameof(code));
-            Health = health;
-            Position = position;
-            PlayerOwner = playerOwner;
+            Health = new Health(health, maxHealth, this);
             Navigator = new GroundUnitNavigator();
             Navigator.SetUnit(this);
-            TargetPosition = position.ToInt();
+
             using var loggerFactory = LoggerFactory.Create(builder =>
             {
                 builder.AddConsole();
                 builder.SetMinimumLevel(LogLevel.Debug);
             });
-
             _logger = loggerFactory.CreateLogger<Unit>();
             _logger.LogDebug(position.ToString());
         }
 
-        public void Init(Game context)
+        public override void Init(Game context)
         {
-            Game = context ?? throw new ArgumentNullException(nameof(context));
+            base.Init(context);
             Navigator.SetMap(Game.Map);
 
             foreach (var attackPoint in AttackingPoints)
@@ -83,10 +64,10 @@ namespace RtsServer.App.Battle.Units
             }
         }
 
-        public void SetId(int id) => Id = id;
-
         public Unit SetTargetPosition(Vector2Int targetPosition)
         {
+            if (targetPosition.X < 0 || targetPosition.Y < 0) return this;
+
             TargetPosition = targetPosition;
             try
             {
@@ -94,7 +75,6 @@ namespace RtsServer.App.Battle.Units
             }
             catch (Exception ex)
             {
-                // Логирование ошибки навигации
                 _logger?.LogError(ex, "Navigation error for unit {UnitId}", Id);
             }
             return this;
@@ -104,85 +84,126 @@ namespace RtsServer.App.Battle.Units
         {
             if (targetUnit == null) return this;
 
-            foreach (var attackPoint in AttackingPoints)
+            foreach (var attackingPoint in AttackingPoints)
             {
-                attackPoint.SetTarget(targetUnit);
+                attackingPoint.SetTarget(targetUnit);
             }
             return this;
         }
 
-        public async Task UpdatePathRouteAsync(HashSet<Vector2Int> route)
+        public void CheckAttackTarget()
         {
-            PathRoute = route ?? throw new ArgumentNullException(nameof(route));
-
-            if (Game?.Players == null) return;
-
-            var tasks = new List<Task>();
-            foreach (var player in Game.Players.Where(p => p.UserAuth != null))
+            foreach (BaseAttackingPoint attackingPoint in AttackingPoints)
             {
-                var userTcp = Game.BattleManager.GameServer.TcpServer.GetClientByUserAuth(player.UserAuth);
-                if (userTcp != null)
-                {
-                    var sender = new UnitPathNavSender(userTcp);
-                    tasks.Add(sender.SetDate(new NUnitPathNav(Id, route)).SendAsync());
-                }
+                attackingPoint.CheckTarget();
             }
-
-            await Task.WhenAll(tasks);
         }
 
-        /**
-         * Движения вращения и прочая логика
-         */
+        public async Task UpdatePathRouteAsync(Queue<Vector2Int> route)
+        {
+            PathRoute = route ?? throw new ArgumentNullException(nameof(route));
+            return;
+        }
+
         protected virtual void MoveToTarget()
         {
-            if (PathRoute == null || PathRoute.Count == 0)
+            if (!HasNextTargetPoint() || TileIsBlocked())
             {
-                IsMoving = false;
-                CurrentSpeed = 0;
+                StopMoving();
+                return;
+            }
+
+            double deltaTime = Game.TimeSystem.GetDelta();
+            Vector2Float targetPosition = GetCurrentTargetPosition();
+            double distanceToTarget = Vector2Float.Distance(Position, targetPosition);
+
+            if (IsReachedTarget(distanceToTarget))
+            {
+                SnapToTarget(targetPosition);
+                AdvanceToNextPoint();
                 return;
             }
 
             IsMoving = true;
-            var deltaTime = Game.TimeSystem.GetDelta();
-            var lastPoint = PathRoute.Last();
-            var targetPosition = lastPoint.GetFloat();
-
-            if (Vector2Float.Distance(Position, targetPosition) < PositionThreshold)
-            {
-                Position = targetPosition;
-                PathRoute.Remove(lastPoint);
-                return;
-            }
-
-            if (RotateTowards(targetPosition))
-            {
-                var direction = (targetPosition - Position).Normalize();
-                var newPosition = Position + direction * CurrentSpeed * deltaTime;
-
-                if (Vector2Float.DistanceSQRT(Position, newPosition) >= Vector2Float.DistanceSQRT(Position, targetPosition))
-                {
-                    newPosition = targetPosition;
-                }
-
-                Position = newPosition;
-            }
-
             UpdateSpeed(deltaTime);
+
+            if (!RotateTowardsTarget(targetPosition, deltaTime))
+                return;
+
+            MoveForwardTowards(targetPosition, deltaTime);
         }
 
-        private bool RotateTowards(Vector2Float target)
+        private bool TileIsBlocked()
+        {
+            if (targetPoint.HasValue)
+                if (Game.Map != null)
+                {
+                    var tile = Game.Map.GetArrayMap()[targetPoint.Value.X, targetPoint.Value.Y];
+                    return tile.UnitsInPoint.Count > 0 && !tile.UnitsInPoint.Contains(this);
+                }
+            return false;
+        }
+
+        private bool HasNextTargetPoint()
+        {
+            if (targetPoint.HasValue) return true;
+
+            if (PathRoute != null && PathRoute.Count > 0)
+            {
+                targetPoint = PathRoute.Dequeue();
+                return true;
+            }
+
+            return false;
+        }
+
+        private void StopMoving()
+        {
+            IsMoving = false;
+            CurrentSpeed = 0;
+        }
+
+        private Vector2Float GetCurrentTargetPosition() => targetPoint!.Value.GetFloat();
+
+        private bool IsReachedTarget(double distanceToTarget) => distanceToTarget < PositionThreshold;
+
+        private void SnapToTarget(Vector2Float targetPosition)
+        {
+            Position = targetPosition;
+        }
+
+        private void AdvanceToNextPoint()
+        {
+            targetPoint = null;
+        }
+
+        private bool RotateTowardsTarget(Vector2Float target, double deltaTime)
         {
             var globalFacing = Vector2Float.VectorByAngle(-Rotation).Normalize();
-            var angleToTarget = Vector2Float.AngleByVecotrs(globalFacing, (target - Position).Normalize());
-            var rotationDirection = Math.Sign(Vector2Float.Cross(globalFacing, (target - Position).Normalize()));
+            var toTarget = (target - Position).Normalize();
 
-            var deltaTime = Game.TimeSystem.GetDelta();
+            var angleToTarget = Vector2Float.AngleByVecotrs(globalFacing, toTarget);
+            var rotationDirection = Math.Sign(Vector2Float.Cross(globalFacing, toTarget));
+
             var rotationStep = RotationSpeed * SpeedAdjustmentFactor * deltaTime;
-
             Rotation += -rotationDirection * Math.Min(rotationStep, angleToTarget);
 
             return angleToTarget % 180 < RotationThreshold || double.IsNaN(angleToTarget);
+        }
+
+        private void MoveForwardTowards(Vector2Float target, double deltaTime)
+        {
+            var direction = (target - Position).Normalize();
+            var step = direction * CurrentSpeed * deltaTime;
+            var newPosition = Position + step;
+
+            if (Vector2Float.DistanceSQRT(Position, newPosition) >= Vector2Float.DistanceSQRT(Position, target))
+            {
+                newPosition = target;
+                AdvanceToNextPoint();
+            }
+
+            Position = newPosition;
         }
 
         private void UpdateSpeed(double deltaTime)
@@ -205,25 +226,44 @@ namespace RtsServer.App.Battle.Units
             BeforeChunkUpdate?.Invoke();
 
             var map = Game.Map.GetArrayMap();
-            map[CurChunkPosition.X, CurChunkPosition.Y].UnitsInPoint.Remove(this);
+
+            if (CurChunkPosition.X >= 0 && CurChunkPosition.Y >= 0 &&
+                CurChunkPosition.X < map.GetLength(0) && CurChunkPosition.Y < map.GetLength(1))
+            {
+                var currentCell = map[CurChunkPosition.X, CurChunkPosition.Y];
+                currentCell?.UnitsInPoint?.Remove(this);
+            }
+
             CurChunkPosition = newChunkPosition;
-            map[CurChunkPosition.X, CurChunkPosition.Y].UnitsInPoint.Add(this);
+
+            if (CurChunkPosition.X >= 0 && CurChunkPosition.Y >= 0 &&
+                CurChunkPosition.X < map.GetLength(0) && CurChunkPosition.Y < map.GetLength(1))
+            {
+                var newCell = map[CurChunkPosition.X, CurChunkPosition.Y];
+                newCell?.UnitsInPoint?.Add(this);
+            }
 
             AfterChunkUpdate?.Invoke();
         }
 
-        public void Update()
+        public override void Update()
         {
-            foreach (var attackPoint in AttackingPoints)
+            foreach (BaseAttackingPoint attackPoint in AttackingPoints)
             {
                 attackPoint.Update();
             }
 
             MoveToTarget();
             UpdateChunkPosition();
+            CheckAttackTarget();
         }
 
-        public void Dispose()
+        public override void Destroy()
+        {
+            base.Destroy();
+        }
+
+        public override void Dispose()
         {
             if (_disposed) return;
             _disposed = true;
@@ -241,4 +281,5 @@ namespace RtsServer.App.Battle.Units
             }
         }
     }
+
 }

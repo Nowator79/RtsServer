@@ -5,7 +5,7 @@
 
         public override void Init()
         {
-            Damage = 20; SpeedRotation = 20;
+            Damage = 700; SpeedRotation = 60; Range = 10; fireCooldown = 5;
         }
     }
 }

@@ -1,5 +1,6 @@
 ﻿using RtsServer.App.Battle.MapBattle;
 using RtsServer.App.FileSystem.Dto;
+using RtsServer.App.NetWorkDto;
 
 namespace RtsServer.App.Adapters
 {
@@ -13,7 +14,7 @@ namespace RtsServer.App.Adapters
             resMap.Chunks = new();
             map.Chunks.ForEach(chunk =>
             {
-                resMap.Chunks.Add(new FChank(chunk.Id, chunk.Height));
+                resMap.Chunks.Add(new FTile(chunk.Id, chunk.Height));
             });
 
             return resMap;
@@ -29,6 +30,22 @@ namespace RtsServer.App.Adapters
             });
 
             return resMap;
+        }
+
+        public static NMap GetNMap(FMap map, string code)
+        {
+            NMap NMap = new(map.Width, map.Length)
+            {
+                Name = map.Name,
+                Code = code
+            };
+            NMap.Tiles = [];
+            map.Chunks.ForEach(tile =>
+            {
+                NMap.Tiles.Add(new NTile(tile.TypeId, tile.Height));
+            });
+
+            return NMap;
         }
     }
 }

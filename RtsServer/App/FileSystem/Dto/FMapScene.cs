@@ -3,7 +3,7 @@
     public struct FMapScene
     {
         public string MapCode { get; set; }
-        public FConstruction[] Constuctins { get; set; }
+        public FConstruction[] Constructions { get; set; }
         public FUnit[] Units { get; set; }
     }
 }

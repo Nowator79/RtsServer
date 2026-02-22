@@ -1,11 +1,11 @@
-﻿namespace RtsServer.App.FileSystem.Dto
+﻿namespace RtsServer.App.NetWorkDto
 {
-    public struct FChank
+    public struct NTile
     {
         public int TypeId { get; set; }
         public int Height { get; set; }
 
-        public FChank(int typeId, int height)
+        public NTile(int typeId, int height)
         {
             TypeId = typeId;
             Height = height;

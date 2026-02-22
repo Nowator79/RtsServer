@@ -1,21 +1,15 @@
 ﻿using Microsoft.Extensions.Logging;
 using RtsServer.App.Adapters;
-using RtsServer.App.Battle.Chat;
 using RtsServer.App.Battle.Constructions;
 using RtsServer.App.Battle.Dto;
 using RtsServer.App.Battle.MapBattle;
 using RtsServer.App.Battle.Navigator;
 using RtsServer.App.Battle.Units;
-using RtsServer.App.NetWork.Tcp;
 using RtsServer.App.NetWorkDto.Response;
 using RtsServer.App.NetWorkResponseSender;
 using RtsServer.App.Tools;
-using RtsServer.App.ViewConsole;
-using System;
-using System.Collections.Generic;
-using System.Text.Json;
-using System.Threading;
-using System.Threading.Tasks;
+using System.Numerics;
+using static RtsServer.App.Battle.Player;
 
 namespace RtsServer.App.Battle
 {
@@ -29,17 +23,23 @@ namespace RtsServer.App.Battle
         private readonly CancellationTokenSource _cts = new();
         private bool _disposed;
         private int _unitNextId = 0;
+        private int _missileNextId = 0;
         private int _constructionNextId = 0;
         bool _isPlaying = false;
 
         public int Id { get; }
         public long CreateDateTime { get; }
-        public Map Map { get; private set; }
-        public List<Player> Players { get; } = new();
-        public List<Unit> Units { get; } = new();
-        public List<Construction> Constructions { get; } = new();
+        public Map? Map { get; private set; }
+        public List<Player> Players { get; } = [];
+        public List<Unit> Units { get; } = [];
+        public List<Missile> Missiles { get; } = [];
+        public List<Construction> Constructions { get; } = [];
+        public HashSet<Unit> UnitsForAdd { get; } = [];
+        public HashSet<Missile> MissilesForAdd { get; } = [];
+        public HashSet<Construction> ConstructionsForAdd { get; } = [];
         public BattleManager BattleManager { get; }
         public TimeSystem TimeSystem { get; }
+
         public event Action UpdateEvent;
         private CancellationToken _cancellationToken;
 
@@ -70,32 +70,33 @@ namespace RtsServer.App.Battle
             return this;
         }
 
-        public async Task StartAsync()
+        public void Init()
+        {
+            SetStatusUsersInGame();
+        }
+
+        public void Start()
         {
             if (Map == null)
                 throw new InvalidOperationException("Map not set");
 
             _logger.LogInformation("Starting game {GameId}", Id);
-
             _isPlaying = true;
-            SetStatusUsersInGame();
-
-            foreach (var player in Players)
-            {
-                var userTcp = BattleManager.GameServer.TcpServer.GetClientByUserAuth(player.UserAuth);
-                if (userTcp != null)
-                {
-                    await new StartGameSender(userTcp)
-                        .SetDate(new SetStartGameData(Map.Code, new Vector2Int()))
-                        .SendAsync();
-                }
-            }
 
             SendUpdateGameAsync();
+
             UpdateEvent += SendUpdateGameAsync;
             UpdateEvent += TimeSystem.Update;
 
             _ = Task.Run(GameLoopAsync, _cts.Token);
+        }
+
+        public void TryStart()
+        {
+            if(!Players.Where(p => p.PlayerState != PlayerStateType.Ready).Any())
+            {
+                Start();
+            }
         }
 
         private async void SendUpdateGameAsync()
@@ -118,11 +119,22 @@ namespace RtsServer.App.Battle
             await Task.WhenAll(tasks);
         }
 
-        private void SetStatusUsersInGame()
+        private async void SetStatusUsersInGame()
         {
-            foreach (var player in Players)
+            foreach (Player player in Players)
             {
                 player.UserAuth.Status.SetInGame();
+            }
+
+            foreach (Player player in Players)
+            {
+                NetWork.Tcp.UserClientTcp? userTcp = BattleManager.GameServer.TcpServer.GetClientByUserAuth(player.UserAuth);
+                if (userTcp != null)
+                {
+                    await new StartGameSender(userTcp)
+                        .SetDate(new SetStartGameData(Map.Code, player.Id, new Vector2Int()))
+                        .SendAsync();
+                }
             }
         }
 
@@ -164,27 +176,67 @@ namespace RtsServer.App.Battle
         {
             UpdateEvent?.Invoke();
 
-            var unitTasks = new List<Task>();
-            foreach (var unit in Units)
-            {
-                unitTasks.Add(Task.Run(unit.Update));
-            }
-            await Task.WhenAll(unitTasks);
+            ClearConstructions();
+            ClearMissile();
+            ClearUnits();
 
-            if (ConfigGameServer.IsDebugGameUpdate)
+            List<Task> update = [];
+
+            foreach (Unit unit in Units)
             {
-                GameViewer.ViewFullInfo(this);
+                update.Add(Task.Run(unit.Update));
             }
 
-            if (ConfigGameServer.IsDebugChunkStatus)
+            foreach (Missile missile in Missiles)
             {
-                DebugPrintChunkStatus();
+                update.Add(Task.Run(missile.Update));
             }
+
+            foreach (Construction construction in Constructions)
+            {
+                update.Add(Task.Run(construction.Update));
+            }
+
+            await Task.WhenAll(update);
+
+            UpdatePlayersStats();
         }
 
-        private void DebugPrintChunkStatus()
+        private void ClearConstructions()
         {
-            // ... (прежняя реализация вывода статуса чанков)
+            foreach (Construction construction in ConstructionsForAdd)
+            {
+                Constructions.Add(construction);
+            }
+            ConstructionsForAdd.Clear();
+
+            Constructions.Where(c => c.IsDestroyed)
+            .ToList()
+            .ForEach(RemoveEntity);
+        }
+        private void ClearMissile()
+        {
+            foreach (Missile missile in MissilesForAdd)
+            {
+                Missiles.Add(missile);
+            }
+            MissilesForAdd.Clear();
+
+            Missiles.Where(m => m.IsDestroyed)
+            .ToList()
+            .ForEach(RemoveEntity);
+        }
+        private void ClearUnits()
+        {
+            foreach (Unit unit in UnitsForAdd)
+            {
+                Units.Add(unit);
+            }
+            UnitsForAdd.Clear();
+
+            Units.Where(u => u.IsDestroyed)
+            .ToList()
+            .ForEach(RemoveEntity);
         }
 
         public async Task EndAsync()
@@ -221,5 +273,57 @@ namespace RtsServer.App.Battle
             _cts.Dispose();
             EndAsync().GetAwaiter().GetResult();
         }
+
+        public void AddMissile(Missile missile)
+        {
+            missile.SetId(_missileNextId++);
+            MissilesForAdd.Add(missile);
+        }
+
+        private void RemoveEntity(BattleEntity entity)
+        {
+            if (entity is Unit unit)
+                Units.Remove(unit);
+            else if (entity is Construction construction)
+                Constructions.Remove(construction);
+            else if (entity is Missile missile)
+                Missiles.Remove(missile);
+
+            entity.Dispose();
+        }
+
+        private void UpdatePlayersStats()
+        {
+            List<Task> tasks = [];
+            Players.ForEach(p =>
+            {
+                NetWork.Tcp.UserClientTcp? userTcp = BattleManager.GameServer.TcpServer.GetClientByUserAuth(p.UserAuth);
+                if (userTcp == null) return;
+                tasks.Add(new PlayerStateSender(userTcp).SetDate(PlayerStateAdapter.Get(p.GetState())).SendAsync());
+            });
+        }
+
+        public void TryBuildConstruction(string code, Vector2Int position, int playerId)
+        {
+            if (!Players.Any(p => p.Id == playerId))
+            {
+                _logger.LogWarning("Player {PlayerId} not found in game {GameId}", playerId, Id);
+                return;
+            }
+
+            try
+            {
+                Construction construction = ConstructionFactory.GetByCode(code, position, playerId);
+                construction.SetGame(this);
+                ConstructionsForAdd.Add(construction);
+
+                _logger.LogInformation("Player {PlayerId} строит здание {Code} на {Pos}", playerId, code, position);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Ошибка при строительстве здания {Code} игроком {PlayerId}", code, playerId);
+            }
+        }
+
     }
 }

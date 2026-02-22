@@ -11,9 +11,9 @@ namespace RtsServer.App.Adapters
         public static MapScene Get(FMapScene mapScene)
         {
             HashSet<Construction> constructions = new();
-            foreach (FConstruction constuctin in mapScene.Constuctins)
+            foreach (FConstruction construction in mapScene.Constructions)
             {
-                constructions.Add(ConstructionFactory.GetByCode(constuctin.Code, constuctin.Position));
+                constructions.Add(ConstructionFactory.GetByCode(construction.Code, construction.Position, construction.PlayerOwnerNum));
             }
 
             HashSet<Unit> units = new();
@@ -24,7 +24,7 @@ namespace RtsServer.App.Adapters
 
             MapFileManager mapFileManager = new();
             return new MapScene(
-                MapAdapter.Get(mapFileManager.LoadMapByName(mapScene.MapCode)),
+                MapAdapter.Get(mapFileManager.LoadMapByCode(mapScene.MapCode)),
                 constructions.ToArray(),
                 units.ToArray()
                 );

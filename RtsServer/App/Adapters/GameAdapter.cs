@@ -10,6 +10,7 @@ namespace RtsServer.App.Adapters
             List<NUser> NUsers = new();
             List<NUnit> NUnits = new();
             List<NConstruction> NConstructions = new();
+            List<NMissile> NMissiles = new();
 
             foreach (Battle.Units.Unit unit in game.Units)
             {
@@ -21,7 +22,12 @@ namespace RtsServer.App.Adapters
                 NConstructions.Add(ConstructionAdapter.Get(construction));
             }
 
-            return new NGame(NUnits, NConstructions);
+            foreach (Battle.Units.Missile missile in game.Missiles)
+            {
+                NMissiles.Add(MissileAdapter.Get(missile));
+            }
+
+            return new NGame(NUnits, NConstructions, NMissiles);
         }
     }
 }

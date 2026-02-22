@@ -1,5 +1,5 @@
-﻿using RtsServer.App.Adapters;
-using RtsServer.App.NetWork.Tcp;
+﻿using RtsServer.App.NetWork.Tcp;
+using RtsServer.App.NetWorkDto;
 using RtsServer.App.NetWorkDto.Response;
 
 namespace RtsServer.App.NetWorkHandlers.Game.Battle
@@ -8,9 +8,13 @@ namespace RtsServer.App.NetWorkHandlers.Game.Battle
     {
         public void Handler(MainResponse response, GameServer context, UserClientTcp clientTcp, CancellationToken cancellationToken)
         {
-            clientTcp.User.Status.SetInSearch();
-            context.BattleManager.AddUserForSearch(clientTcp.User);
+            if (clientTcp.User != null)
+            {
+                clientTcp.User.Status.SetInSearch();
+                NStartBattleData startBattleData = response.GetBody<NStartBattleData>();
+                
+                context.BattleManager.AddUserToQueue(new App.Battle.Queue(clientTcp.User, startBattleData.Type));
+            }
         }
     }
 }
-

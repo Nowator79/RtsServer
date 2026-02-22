@@ -1,33 +1,64 @@
-﻿using RtsServer.App.DataBase.Dto;
+﻿using RtsServer.App.Battle.Interfaces;
+using RtsServer.App.DataBase.Dto;
 
 namespace RtsServer.App.Battle
 {
     public class Player
     {
+        public Game Game { get; }
         public UserAuth UserAuth { get; }
-        public int Money { get; private set; } 
-        public int IdBattlePlayer { get; private set; }
-
-        public Player(UserAuth UserAuth, int idBattlePlayer)
+        public int Id { get; private set; }
+        public PlayerStateType PlayerState { get; set; }
+        public Player(UserAuth UserAuth, int Id, Game Game)
         {
             this.UserAuth = UserAuth;
-            Money = 0;
-            IdBattlePlayer = idBattlePlayer;
+            this.Id = Id;
+            this.Game = Game;
+            PlayerState = PlayerStateType.None;
         }
-
-        public void UpMoney(int money)
+        public ResourcesPlayer GetState()
         {
-            Money += money;
+            ResourcesPlayer State = new();
+
+            float resources = 0;
+            float resourcesMax = 0;
+            Game.Constructions.Where(c => c.OwnerId == Id).ToList().ForEach(c =>
+            {
+                if (c is IResourceStorage resourceProducer)
+                {
+                    resources += resourceProducer.Resources;
+                    resourcesMax += resourceProducer.LimitResources;
+                }
+                if(c is IEnergyProvider energyProvider)
+                {
+                    State.LimitEnergy = energyProvider.EnergyProvided;
+                }
+            });
+
+            State.UseEnergy = 0;
+            State.Resources = (int)resources;
+            State.MaxResources = (int)resourcesMax;
+            
+            return State;
         }
-
-        public void ВebitingMoney(int money)
+        public void SetReady()
         {
-            Money -= money;
+            PlayerState = PlayerStateType.Ready;
+            Game.TryStart();
         }
-
-        public int GetPowerEnegry()
+        public struct ResourcesPlayer
         {
-            throw new NotImplementedException();
+            public int Resources;
+            public int MaxResources;
+            public int UseEnergy;
+            public int LimitEnergy;
+        }
+        public enum PlayerStateType
+        {
+            None,
+            Ready,
+            Playing,
+            Loading
         }
     }
 }

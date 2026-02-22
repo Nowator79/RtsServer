@@ -11,6 +11,7 @@ namespace RtsServer.App.DataBase.Db
         {
             Users = new();
         }
+
         public void Add(UserAuth user)
         {
             UserAuth? findUser = Users.Find(e => e.UserName == user.UserName);

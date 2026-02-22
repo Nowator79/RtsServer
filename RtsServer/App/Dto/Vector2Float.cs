@@ -137,8 +137,12 @@ namespace RtsServer.App.Battle.Dto
             Angle(gv, t - g);
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static double DistanceSQRT(Vector2Float a, Vector2Float b) =>
-            (a.X - b.X) * (a.X - b.X) + (a.Y - b.Y) * (a.Y - b.Y);
+        public static double DistanceSQRT(Vector2Float a, Vector2Float b)
+        {
+            double dx = a.X - b.X;
+            double dy = a.Y - b.Y;
+            return dx * dx + dy * dy;
+        }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static double SideByVector(Vector2Float p1, Vector2Float p2, Vector2Float p3) =>
@@ -156,6 +160,11 @@ namespace RtsServer.App.Battle.Dto
         public static double ToGrad(double rad) => rad * Rad2Deg;
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static double ToRad(double grad) => grad * Deg2Rad;
+        public static bool ReachDistance(Vector2Float curPos, Vector2Float target, float distance) => DistanceSQRT(curPos, target) < distance * distance;
+
+        public static explicit operator Vector2Int(Vector2Float v)
+        {
+            return new Vector2Int((int)v.X, (int)v.Y);
+        }
     }
 }

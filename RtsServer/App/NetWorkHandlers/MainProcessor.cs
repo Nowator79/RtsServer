@@ -10,7 +10,7 @@ namespace RtsServer.App.NetWorkHandlers
         public void Handler(MainResponse response, UserClientTcp clientTcp, CancellationToken cancellationToken)
         {
             GameServer.Router.Do(response, clientTcp, cancellationToken);
-        }
+        } 
 
         public void SetContext(GameServer server)
         {

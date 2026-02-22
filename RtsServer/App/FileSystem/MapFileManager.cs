@@ -11,17 +11,17 @@ namespace RtsServer.App.FileSystem
             format = "json";
         }
 
-        public FMap LoadMapByName(string name)
+        public FMap LoadMapByCode(string code)
         {
-            string fileText = File.ReadAllText(@$"{path}\{name}.json");
+            string fileText = File.ReadAllText(@$"{path}\{code}.json");
             return JsonSerializer.Deserialize<FMap>(fileText);
         }
 
-        public void SaveMapByName(FMap map, string name)
+        public void SaveMapByCode(FMap map, string code)
         {
             string text = JsonSerializer.Serialize(map);
 
-            string pathFile = path + name + "." + format;
+            string pathFile = path + code + "." + format;
 
             if (!Directory.Exists(path))
             {

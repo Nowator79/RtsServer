@@ -1,20 +1,38 @@
-﻿namespace RtsServer.App.Battle.Dto
-{
-    public struct Health
-    {
-        public int Value;
-        public int Max;
+﻿using RtsServer.App.Battle.Units;
 
-        public Health(int value, int max)
+namespace RtsServer.App.Battle.Dto
+{
+    public class Health
+    {
+        public float Value { get; private set; }
+        private int Max;
+        private BattleEntity _entity;
+
+        public Health(int value, int max, BattleEntity entity)
         {
             Value = value;
             Max = max;
+            _entity = entity;
         }
 
-        public Health(int max)
+     
+        public void TakeDamage(float amount)
         {
-            Value = max;
-            Max = max;
+            if (Value <= 0 || Value <= 0)
+                return;
+
+            Value -= amount;
+
+            if (Value <= 0)
+            {
+                Die();
+            }
+        }
+
+        private void Die()
+        {
+            Value = 0;
+            _entity.Destroy();
         }
     }
 }

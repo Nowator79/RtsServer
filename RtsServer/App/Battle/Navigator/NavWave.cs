@@ -15,10 +15,10 @@ namespace RtsServer.App.Battle.Navigator
         private readonly Vector2Int _startPoint;
         private readonly Vector2Int _endPoint;
 
-        private readonly List<Vector2Int> _route = new();
-        private  HashSet<Vector2Int> _processedPoints = new();
-        private  HashSet<Vector2Int> _currentWavePoints = new();
-        private  HashSet<Vector2Int> _nextWavePoints = new();
+        private readonly Queue<Vector2Int> _route = new();
+        private HashSet<Vector2Int> _processedPoints = new();
+        private HashSet<Vector2Int> _currentWavePoints = new();
+        private HashSet<Vector2Int> _nextWavePoints = new();
 
         private bool _isFinished;
         private bool _disposed;
@@ -53,7 +53,10 @@ namespace RtsServer.App.Battle.Navigator
             }
         }
 
-        public List<Vector2Int> GetRoutePath() => _route;
+        public Queue<Vector2Int> GetRoutePath()
+        {
+            return new Queue<Vector2Int>(_route.Reverse());
+        }
 
         public void Dispose()
         {
@@ -139,7 +142,7 @@ namespace RtsServer.App.Battle.Navigator
 
         private void TraceBackPath()
         {
-            _route.Add(_endPoint);
+            _route.Enqueue(_endPoint);
             TraceBackRecursive(_mapChunks[_endPoint.X, _endPoint.Y]);
         }
 
@@ -150,7 +153,7 @@ namespace RtsServer.App.Battle.Navigator
             var neighbors = GetValidTracebackNeighbors(currentChunk);
             var nextChunk = NavHelper.GetSortForReverseChunk(neighbors, currentChunk.Position.X, currentChunk.Position.Y);
 
-            _route.Add(nextChunk.Position);
+            _route.Enqueue(nextChunk.Position);
 
             if (nextChunk.Position == _startPoint)
             {

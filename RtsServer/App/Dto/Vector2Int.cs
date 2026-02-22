@@ -33,5 +33,10 @@ namespace RtsServer.App.Battle.Dto
         {
             return counter1.X != counter2.X || counter1.Y != counter2.Y;
         }
+
+        public static implicit operator Vector2Float(Vector2Int v)
+        {
+            return new Vector2Float(v.X, v.Y);
+        }
     }
 }

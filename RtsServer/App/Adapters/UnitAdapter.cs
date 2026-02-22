@@ -7,7 +7,7 @@ namespace RtsServer.App.Adapters
     {
         public static NUnit Get(Unit unit)
         {
-            NUnit unitRes = new NUnit(unit.Id, unit.Code, unit.Health.Value, unit.Position, unit.Rotation);
+            NUnit unitRes = new NUnit(unit.Id, unit.Code, unit.Health.Value, unit.Position, unit.Rotation, unit.OwnerId);
             unitRes.Info = new NUnit.NUnitInfo(unit.MaxSpeed, unit.CurrentSpeed);
             unitRes.AttackPoints = new NAttackPoint[unit.AttackingPoints.Length];
             for (int i = 0; i < unit.AttackingPoints.Length; i++)

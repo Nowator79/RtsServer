@@ -11,14 +11,16 @@ namespace RtsServer.App.NetWorkDto
         public double Rotation { get; set; }
         public NAttackPoint[] AttackPoints { get; set; }
         public NUnitInfo Info { get; set; }
+        public int OwnerId { get; set; }
 
-        public NUnit(int Id, string Code, float Health, Vector2Float Position, double Rotation)
+        public NUnit(int Id, string Code, float Health, Vector2Float Position, double Rotation, int OwnerId)
         {
             this.Id = Id;
             this.Code = Code;
             this.Health = Health;
             this.Position = Position;
             this.Rotation = Rotation;
+            this.OwnerId = OwnerId;
         }
 
 

@@ -4,7 +4,7 @@ namespace RtsServer.App.Battle.Units
 {
     public class Soldier : Unit
     {
-        public Soldier(Vector2Float position, int playerOwner) : base("Soldier", new(100), position, playerOwner)
+        public Soldier(Vector2Int position, int playerOwner) : base("Soldier", 400, 400, position, playerOwner)
         {
             MaxSpeed = 2;
             RotationSpeed = 2;

@@ -1,10 +1,6 @@
 ﻿using Microsoft.Extensions.Logging;
-using RtsServer.App.Battle.Chat;
-using RtsServer.App.Battle.Constructions;
 using RtsServer.App.Battle.MapBattle;
-using RtsServer.App.Battle.Units;
 using RtsServer.App.DataBase.Dto;
-using System.Threading;
 
 namespace RtsServer.App.Battle
 {
@@ -12,12 +8,13 @@ namespace RtsServer.App.Battle
     {
         private readonly ILogger<BattleManager> _logger;
         public List<Game> Games { get; private set; }
-        public HashSet<UserAuth> UsersForSearching { get; private set; }
         public GameServer GameServer { get; private set; }
         public MapSceneFactory MapSceneFactory { get; private set; }
         public Dictionary<string, MapScene> MapScene { get; private set; }
 
-        private readonly string[] MapsForPvp = { "test" };
+        public Dictionary<string, MatchType> MatchTypes { get; } = new();
+        public Dictionary<string, List<UserAuth>> MatchmakingQueues { get; } = new();
+
         private readonly Random rnd = new();
         private CancellationToken _cancellationToken;
 
@@ -35,137 +32,107 @@ namespace RtsServer.App.Battle
 
             GameServer = gameServer;
             Games = new();
-            UsersForSearching = new();
             MapSceneFactory = new();
             MapScene = new();
+
+            InitMatchTypes();
+        }
+        
+        private void InitMatchTypes()
+        {
+            MatchTypes["1v1"] = new MatchType("1v1", 2, ["test"]);
+            MatchTypes["demo"] = new MatchType("demo", 1, ["test"]);
+            MatchTypes["ffa4"] = new MatchType("ffa4", 4, ["test"]);
         }
 
-        public void AddGame(Game Game)
+        public void AddUserToQueue(Queue queueData)
         {
-            Games.Add(Game);
-        }
-
-        public void FindUsersForBattle()
-        {
-            if (UsersForSearching.Count >= 2)
+            if (!MatchTypes.ContainsKey(queueData.Type))
             {
-                UserAuth firstUser = null;
-                UserAuth secondUser = null;
-
-                foreach (UserAuth user in UsersForSearching)
-                {
-                    if (firstUser == null)
-                    {
-                        firstUser = user;
-                    }
-                    else
-                    {
-                        secondUser = user;
-                        break;
-                    }
-                }
-
-                UsersForSearching.Remove(firstUser);
-                UsersForSearching.Remove(secondUser);
-
-                Game game = new(Games.Count, this, _cancellationToken);
-                string nameMap = MapsForPvp[rnd.Next(0, MapsForPvp.Length)];
-                List<MapScene> mapScenes = new(MapSceneFactory.GetAllMapScene());
-                MapScene? mapScene = mapScenes.Find(mapScene => mapScene.Map.Code == nameMap);
-                if (mapScene == null) throw new Exception("Не найдена нужная карта");
-                    game.SetMap(mapScene.Map);
-
-                int IdPlayerInc = 0;
-                game.Players.Add(new Player(firstUser, IdPlayerInc++));
-                game.Players.Add(new Player(secondUser, IdPlayerInc++));
-
-                foreach (Unit unit in mapScene.Units)
-                {
-                    unit.Init(game);
-                    game.AddUnit(unit);
-                }
-
-                foreach (Construction construction in mapScene.ConstructionAdditionalsForMap)
-                {
-                    construction.SetGame(game);
-                    game.AddConstruction(construction);
-                }
-
-                game.StartAsync();
-
-                AddGame(game);
+                _logger.LogError($"Тип матча '{queueData.Type}' не найден.");
+                return;
             }
+
+            if (!MatchmakingQueues.ContainsKey(queueData.Type))
+                MatchmakingQueues[queueData.Type] = new();
+
+            List<UserAuth> queue = MatchmakingQueues[queueData.Type];
+            if (!queue.Contains(queueData.User))
+                queue.Add(queueData.User);
+
+            TryStartMatch(queueData.Type);
         }
 
-        public void FindUserOneForBattle()
+        private void TryStartMatch(string matchCode)
         {
-            if (UsersForSearching.Count >= 1)
+            var matchType = MatchTypes[matchCode];
+            var queue = MatchmakingQueues[matchCode];
+
+            if (queue.Count < matchType.PlayersRequired)
+                return;
+
+            var players = queue.Take(matchType.PlayersRequired).ToList();
+            queue.RemoveRange(0, matchType.PlayersRequired);
+
+            var mapScenes = MapSceneFactory.GetAllMapScene()
+                .Where(scene => matchType.AllowedMapCodes.Contains(scene.Map.Code))
+                .ToList();
+
+            if (mapScenes.Count == 0)
             {
-                UserAuth firstUser = null;
-                foreach (UserAuth user in UsersForSearching)
-                {
-                    if (firstUser == null)
-                    {
-                        firstUser = user;
-                        break;
-                    }
-                }
-
-                UsersForSearching.Remove(firstUser);
-
-                Game game = new(Games.Count, this, _cancellationToken);
-                string nameMap = MapsForPvp[rnd.Next(0, MapsForPvp.Length)];
-                List<MapScene> mapScenes = new(MapSceneFactory.GetAllMapScene());
-                MapScene? mapScene = mapScenes.Find(mapScene => mapScene.Map.Code == nameMap);
-                if (mapScene == null) throw new Exception("Не найдена нужная карта");
-                game.SetMap(mapScene.Map);
-                int IdPlayerInc = 0;
-                game.Players.Add(new Player(firstUser, IdPlayerInc++));
-
-                foreach (Unit unit in mapScene.Units)
-                {
-                    unit.Init(game);
-                    game.AddUnit(unit);
-                }
-
-                foreach (Construction construction in mapScene.ConstructionAdditionalsForMap)
-                {
-                    construction.SetGame(game);
-                    game.AddConstruction(construction);
-                }
-
-                game.StartAsync();
-
-                AddGame(game);
+                _logger.LogError($"Нет подходящих карт для матча {matchCode}");
+                return;
             }
+
+            var selectedMap = mapScenes[rnd.Next(mapScenes.Count)];
+
+            var game = new Game(Games.Count, this, _cancellationToken);
+            game.SetMap(selectedMap.Map);
+
+            int id = 0;
+            foreach (var user in players)
+                game.Players.Add(new Player(user, id++, game));
+
+            foreach (var unit in selectedMap.Units)
+            {
+                unit.Init(game);
+                game.AddUnit(unit);
+            }
+
+            foreach (var construction in selectedMap.ConstructionAdditionalsForMap)
+            {
+                construction.SetGame(game);
+                game.AddConstruction(construction);
+            }
+
+            game.Init();
+
+            AddGame(game);
         }
 
-        public void AddUserForSearch(UserAuth user)
+        public void AddGame(Game game)
         {
-            UsersForSearching.Add(user);
-            if (ConfigGameServer.IsTestBattle)
-            {
-                FindUserOneForBattle();
-            }
-            else
-            {
-                FindUsersForBattle();
-            }
-        }
-        public void RemoveUserForSearch(UserAuth user)
-        {
-            UsersForSearching.Remove(user);
+            Games.Add(game);
         }
 
         public void EndBattleByUser(UserAuth user)
         {
-            Game? game = Games.Find(game => {
-                return game.Players.Find(player => player.UserAuth == user) != null;
-            });
-            if (game != null)
+            Game? game = Games.Find(game => game.Players.Any(player => player.UserAuth == user));
+            game?.EndAsync();
+        }
+
+        public void RemoveUserForSearch(UserAuth user)
+        {
+            foreach (List<UserAuth> queue in MatchmakingQueues.Values)
             {
-                game.EndAsync();
+                queue.RemoveAll(u => u == user);
             }
         }
+    }
+
+    public struct Queue(UserAuth user, string type)
+    {
+        public UserAuth User = user;
+        public string Type = type;
     }
 }

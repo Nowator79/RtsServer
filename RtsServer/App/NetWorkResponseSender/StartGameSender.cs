@@ -1,7 +1,4 @@
 ﻿using RtsServer.App.NetWork.Tcp;
-using System.Text.Json;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace RtsServer.App.NetWorkResponseSender
 {
@@ -16,11 +13,6 @@ namespace RtsServer.App.NetWorkResponseSender
         {
             _response.SetBody(data);
             return this;
-        }
-
-        public async Task SendAsync(CancellationToken cancellationToken = default)
-        {
-            await _clientApi.WriteAsync(_response, cancellationToken);
         }
     }
 }

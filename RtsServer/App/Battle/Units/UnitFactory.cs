@@ -5,7 +5,7 @@ namespace RtsServer.App.Battle.Units
 {
     public class UnitFactory
     {
-        public static Unit GetByCode(string code, Vector2Int position, int player)
+        public static Unit GetByCode(string code, Vector2Float position, int player)
         {
             Type? TestType = Type.GetType($"RtsServer.App.Battle.Units.{code}");
 
@@ -13,14 +13,14 @@ namespace RtsServer.App.Battle.Units
             if (TestType != null)
             {
                 //получаем конструктор
-                Type[] types = new Type[] { typeof(Vector2Int), typeof(int) };
+                Type[] types = [typeof(Vector2Float), typeof(int)];
                 System.Reflection.ConstructorInfo? ci = TestType.GetConstructor(types);
                 if (ci == null) throw new Exception("Не найден конструктор");
 
-                Unit? construction = (Unit)ci.Invoke([position, player]);
-                if (construction == null) throw new Exception("Проблемы с объектом");
+                Unit? unit = (Unit)ci.Invoke([position, player]);
+                if (unit == null) throw new Exception("Проблемы с объектом");
 
-                return construction;
+                return unit;
             }
             throw new Exception("Не найден конструктор");
         }

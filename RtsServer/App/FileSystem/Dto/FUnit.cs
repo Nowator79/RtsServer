@@ -6,6 +6,6 @@ namespace RtsServer.App.FileSystem.Dto
     {
         public int PlayerOwnerNum { get; set; }
         public string Code { get; set; }
-        public Vector2Int Position { get; set; }
+        public Vector2Float Position { get; set; }
     }
 }

@@ -1,4 +1,5 @@
 ﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using RtsServer.App.DataBase.Dto;
 
 namespace RtsServer.App.DataBase
@@ -15,7 +16,8 @@ namespace RtsServer.App.DataBase
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {
             optionsBuilder.UseMySql("server=localhost;user=root;password=root;database=rts_server;",
-                new MySqlServerVersion(new Version(8, 0, 25)));
+                new MySqlServerVersion(new Version(8, 0, 25)))
+                .EnableSensitiveDataLogging();
         }
     }
 }

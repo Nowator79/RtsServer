@@ -33,14 +33,20 @@ namespace RtsServer.App.NetWorkHandlers.Game
 
             if (game == null) return;
             SetAttackTargetUnits setTargetUnitsReq = response.GetBody<SetAttackTargetUnits>();
+            try
+            {
+
             setTargetUnitsReq.UnitsIds.ForEach(unitID =>
             {
                 var unit = game.Units[unitID];
-                if (clientTcp.User.Id == unit.PlayerOwner) {
+                if (clientTcp.User.Id == unit.OwnerId) {
                     game.Units[unitID].SetAttackTarget(game.Units[setTargetUnitsReq.TargetUnitId]);
                 }
             });
-            
+            } catch (Exception ex)
+            {
+                Console.WriteLine(ex.Message);
+            }
         }
     }
 }

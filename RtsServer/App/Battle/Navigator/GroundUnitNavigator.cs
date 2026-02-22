@@ -26,25 +26,23 @@ namespace RtsServer.App.Battle.Navigator
 
         public async void Start()
         {
-            /// пока блокируем перемещние на водные клетки, потом надо 
-            /// будет сделать функцию ближайшей доступной точки на суше
-            if (Map.GetArrayMap()[Unit.TargetPosition.X, Unit.TargetPosition.Y].Id == 0) return;
+            // Блокируем перемещение на воду
+            if (Map.GetArrayMap()[Unit.TargetPosition.X, Unit.TargetPosition.Y].Id == 0)
+                return;
 
-            // чистим буффер
-            if (Unit.PathRoute != null)
-            {
-                Unit.PathRoute.Clear();
-            }
+            // Чистим предыдущий маршрут
+            Unit.PathRoute?.Clear();
 
             Vector2Int curPosition = Unit.Position.ToInt();
             NavWave navWave = new(Map, curPosition, Unit.TargetPosition);
             navWave.Run();
 
-            // выставляем результат функции поиска пути волной 
+            // Если путь найден — отправляем, но в правильном порядке
             if (!navWave.IsFail)
             {
-                await Unit.UpdatePathRouteAsync(navWave.GetRoutePath().ToHashSet());
+                await Unit.UpdatePathRouteAsync(navWave.GetRoutePath());
             }
         }
+
     }
 }
