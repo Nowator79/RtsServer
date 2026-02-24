@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Concurrent;
 using System.Net.Sockets;
 using System.Text;
@@ -108,17 +108,34 @@ namespace RtsServer.App.NetWork.Tcp
         {
             if (response == null)
                 throw new ArgumentNullException(nameof(response));
+            if (_disposed || Stream == null)
+            {
+                _logger.LogWarning("Клиент {ClientId}: запись пропущена — соединение закрыто", Id);
+                return;
+            }
 
-            string json = JsonSerializer.Serialize(response) + "\n";
-            byte[] bytes = Encoding.UTF8.GetBytes(json);
-
-            await Stream.WriteAsync(bytes, 0, bytes.Length, cancellationToken)
-                .ConfigureAwait(false);
-
-            CountWrite++;
-
-            if (ConfigGameServer.IsDebugNetWork)
-                _logger.LogDebug("Отправлено {ClientId}: {Data}", Id, json.Trim());
+            try
+            {
+                string json = JsonSerializer.Serialize(response) + "\n";
+                byte[] bytes = Encoding.UTF8.GetBytes(json);
+                await Stream.WriteAsync(bytes, 0, bytes.Length, cancellationToken).ConfigureAwait(false);
+                CountWrite++;
+                if (ConfigGameServer.IsDebugNetWork)
+                    _logger.LogDebug("Отправлено {ClientId}: {Data}", Id, json.Trim());
+            }
+            catch (ObjectDisposedException)
+            {
+                _logger.LogDebug("Клиент {ClientId}: поток закрыт при записи", Id);
+            }
+            catch (IOException ex)
+            {
+                _logger.LogWarning(ex, "Клиент {ClientId}: ошибка записи в поток", Id);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Клиент {ClientId}: неожиданная ошибка при записи (Action: {Action})", Id, response.Action);
+                throw;
+            }
         }
 
         public void UpdatePing() => LastPing = DateTime.UtcNow.Ticks;
