@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using RtsServer.App.NetWork.Tcp;
 using RtsServer.App.NetWorkDto.Response;
 using RtsServer.App.NetWorkHandlers.Auth;
@@ -13,11 +14,13 @@ namespace RtsServer.App.NetWorkHandlers
 {
     public class Router
     {
+        private readonly ILogger<Router> _logger;
         private readonly Dictionary<string, IProcessor> processorsAll = new();
         public GameServer? GameServer { get; private set; }
 
-        public Router()
+        public Router(ILogger<Router> logger)
         {
+            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             RegisterDefaultHandlers();
         }
 
@@ -34,7 +37,7 @@ namespace RtsServer.App.NetWorkHandlers
             if (GameServer == null) throw new InvalidOperationException();
             if (mainResponse == null || string.IsNullOrEmpty(mainResponse.Action))
             {
-                Console.WriteLine("[Router] Получен некорректный запрос");
+                _logger.LogWarning("Получен некорректный запрос");
                 return;
             }
 
@@ -42,7 +45,7 @@ namespace RtsServer.App.NetWorkHandlers
             if (!mainResponse.Action.StartsWith("/auth/", StringComparison.OrdinalIgnoreCase)
                 && clientTcp.User == null)
             {
-                Console.WriteLine($"[Router] Неавторизованный клиент {clientTcp.Id} попытался вызвать {mainResponse.Action}");
+                _logger.LogWarning("Неавторизованный клиент {ClientId} попытался вызвать {Action}", clientTcp.Id, mainResponse.Action);
                 return;
             }
 
@@ -52,8 +55,7 @@ namespace RtsServer.App.NetWorkHandlers
             }
             else
             {
-                Console.WriteLine($"[Router] Неизвестный экшен: {mainResponse.Action}");
-                // Опционально: можно отправить ответ клиенту о неизвестном запросе
+                _logger.LogWarning("Неизвестный экшен: {Action}", mainResponse.Action);
             }
         }
 

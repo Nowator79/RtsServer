@@ -1,4 +1,5 @@
-﻿using RtsServer.App.DataBase;
+using Microsoft.Extensions.Logging;
+using RtsServer.App.DataBase;
 using RtsServer.App.DataBase.Dto;
 using RtsServer.App.NetWork.Tcp;
 using RtsServer.App.NetWorkDto;
@@ -26,7 +27,7 @@ namespace RtsServer.App.NetWorkHandlers.Auth
 
                 new CurUserDataSender(clientTcp).SetDate(Adapters.UserAdapter.Get(clientTcp.User)).SendMessage();
 
-                Console.WriteLine($"Клиент {clientTcp.Id} авторизовался под {clientTcp.User.UserName}");
+                context.GetLogger<Login>().LogInformation("Клиент {ClientId} авторизовался под {UserName}", clientTcp.Id, clientTcp.User.UserName);
             }
         }
     }

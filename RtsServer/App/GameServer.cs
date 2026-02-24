@@ -17,6 +17,7 @@ namespace RtsServer.App
     public sealed class GameServer : IDisposable
     {
         private readonly ILogger<GameServer> _logger;
+        private readonly ILoggerFactory _loggerFactory;
         private readonly CancellationTokenSource _cts = new();
         private bool _disposed;
 
@@ -28,20 +29,21 @@ namespace RtsServer.App
         public ChatSystem ChatSystem { get; }
         public ConcurrentBag<Action> ActionsUpdate { get; } = new();
 
+        public ILogger<T> GetLogger<T>() => _loggerFactory.CreateLogger<T>();
+
         public GameServer(int port, CancellationToken cancellationToken)
         {
             Port = port;
 
-            using var loggerFactory = LoggerFactory.Create(builder =>
+            _loggerFactory = LoggerFactory.Create(builder =>
             {
                 builder.AddConsole();
                 builder.SetMinimumLevel(LogLevel.Debug);
             });
 
-            _logger = loggerFactory.CreateLogger<GameServer>();
+            _logger = _loggerFactory.CreateLogger<GameServer>();
 
-
-            Router = new Router();
+            Router = new Router(_loggerFactory.CreateLogger<Router>());
             Router.SetContext(this);
 
             DbUsers = new DbUsers();
@@ -169,6 +171,7 @@ namespace RtsServer.App
 
             StopAsync().GetAwaiter().GetResult();
             _cts.Dispose();
+            (_loggerFactory as IDisposable)?.Dispose();
 
             GC.SuppressFinalize(this);
         }

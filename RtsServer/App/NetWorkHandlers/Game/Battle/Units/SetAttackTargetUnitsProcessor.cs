@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging;
 using RtsServer.App.NetWork.Tcp;
 using RtsServer.App.NetWorkDto.Response;
 
@@ -23,29 +23,24 @@ namespace RtsServer.App.NetWorkHandlers.Game
                         return isThisUser;
                     }
                 );
-            using var loggerFactory = LoggerFactory.Create(builder =>
-            {
-                builder.AddConsole();
-                builder.SetMinimumLevel(LogLevel.Debug);
-            });
-
-            var _logger = loggerFactory.CreateLogger<SetAttackTargetUnitsProcessor>();
+            var logger = context.GetLogger<SetAttackTargetUnitsProcessor>();
 
             if (game == null) return;
             SetAttackTargetUnits setTargetUnitsReq = response.GetBody<SetAttackTargetUnits>();
             try
             {
-
-            setTargetUnitsReq.UnitsIds.ForEach(unitID =>
+                setTargetUnitsReq.UnitsIds.ForEach(unitID =>
+                {
+                    var unit = game.Units[unitID];
+                    if (clientTcp.User.Id == unit.OwnerId)
+                    {
+                        game.Units[unitID].SetAttackTarget(game.Units[setTargetUnitsReq.TargetUnitId]);
+                    }
+                });
+            }
+            catch (Exception ex)
             {
-                var unit = game.Units[unitID];
-                if (clientTcp.User.Id == unit.OwnerId) {
-                    game.Units[unitID].SetAttackTarget(game.Units[setTargetUnitsReq.TargetUnitId]);
-                }
-            });
-            } catch (Exception ex)
-            {
-                Console.WriteLine(ex.Message);
+                logger.LogError(ex, "Ошибка при установке цели атаки");
             }
         }
     }

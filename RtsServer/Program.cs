@@ -13,7 +13,7 @@ var logger = loggerFactory.CreateLogger<GameServer>();
 
 try
 {
-    CancellationToken cancellationToken = new CancellationToken();
+    CancellationToken cancellationToken = CancellationToken.None;
     int port = ConfigGameServer.Port;
 
     // Создаем и запускаем сервер
