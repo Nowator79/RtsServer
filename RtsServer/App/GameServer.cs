@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
@@ -113,6 +113,16 @@ namespace RtsServer.App
                 .Where(client => client.User != null)
                 .Select(client => client.User!)
                 .ToList();
+        }
+
+        /// <summary>
+        /// Вызывается при отключении клиента (таймаут, закрытие сокета).
+        /// Завершает матч для этого игрока, чтобы матч не «висел», если вышел единственный игрок.
+        /// </summary>
+        public void OnUserDisconnected(UserAuth? user)
+        {
+            if (user == null) return;
+            BattleManager.EndBattleByUser(user);
         }
 
         private void CheckPingClients()

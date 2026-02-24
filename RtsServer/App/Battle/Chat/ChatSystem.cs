@@ -1,4 +1,3 @@
-﻿using Microsoft.EntityFrameworkCore.Metadata.Internal;
 using RtsServer.App.DataBase.Dto;
 using RtsServer.App.NetWorkDto;
 using RtsServer.App.NetWorkResponseSender;

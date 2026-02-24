@@ -1,4 +1,4 @@
-﻿using RtsServer.App.FileSystem.Dto;
+using RtsServer.App.FileSystem.Dto;
 using System.Text.Json;
 
 namespace RtsServer.App.FileSystem
@@ -7,13 +7,29 @@ namespace RtsServer.App.FileSystem
     {
         public MapFileManager()
         {
-            path = MainFolder  + @"Map";
+            path = Path.Combine(MainFolder, "Map");
             format = "json";
         }
 
         public FMap LoadMapByCode(string code)
         {
-            string fileText = File.ReadAllText(@$"{path}\{code}.json");
+            string filePath = Path.Combine(path, $"{code}.{format}");
+
+            // Если файла карты нет — создаём простую дефолтную карту,
+            // чтобы сервер мог стартовать на чистой машине.
+            if (!File.Exists(filePath))
+            {
+                if (!Directory.Exists(path))
+                {
+                    Directory.CreateDirectory(path);
+                }
+
+                var defaultMap = CreateDefaultMap(code);
+                SaveMapByCode(defaultMap, code);
+                return defaultMap;
+            }
+
+            string fileText = File.ReadAllText(filePath);
             return JsonSerializer.Deserialize<FMap>(fileText);
         }
 
@@ -21,17 +37,28 @@ namespace RtsServer.App.FileSystem
         {
             string text = JsonSerializer.Serialize(map);
 
-            string pathFile = path + code + "." + format;
-
             if (!Directory.Exists(path))
             {
                 Directory.CreateDirectory(path);
             }
 
+            string pathFile = Path.Combine(path, $"{code}.{format}");
+
             using (StreamWriter writer = new(pathFile, false))
             {
                 writer.WriteLineAsync(text).Wait();
             }
+        }
+
+        private static FMap CreateDefaultMap(string code)
+        {
+            return new FMap
+            {
+                Name = code,
+                Width = 16,
+                Length = 16,
+                Chunks = new List<FTile>()
+            };
         }
     }
 }

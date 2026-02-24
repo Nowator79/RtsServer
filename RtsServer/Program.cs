@@ -1,5 +1,6 @@
-﻿using Microsoft.Extensions.Logging;
+    using Microsoft.Extensions.Logging;
 using RtsServer.App;
+using RtsServer.App.DebugDashboard;
 
 // Конфигурация логгера
 using var loggerFactory = LoggerFactory.Create(builder =>
@@ -12,11 +13,19 @@ var logger = loggerFactory.CreateLogger<GameServer>();
 
 try
 {
-    const int port = 7912;
-    CancellationToken cancellationToken = new CancellationToken();  
+    CancellationToken cancellationToken = new CancellationToken();
+    int port = ConfigGameServer.Port;
+
     // Создаем и запускаем сервер
     using var server = new GameServer(port, cancellationToken);
     await server.RunAsync();
+
+    if (ConfigGameServer.IsDebugDashboardEnabled)
+    {
+        var dashboardPort = ConfigGameServer.DebugDashboardPort;
+        _ = Task.Run(() => DebugDashboardRunner.RunAsync(server, dashboardPort, CancellationToken.None));
+        logger.LogInformation("Дашборд отладки: http://localhost:{Port}", dashboardPort);
+    }
 
     logger.LogInformation("Сервер запущен на порту {Port}. Нажмите Enter для остановки...", port);
 

@@ -1,4 +1,4 @@
-﻿using RtsServer.App.Battle.Dto;
+using RtsServer.App.Battle.Dto;
 using RtsServer.App.Battle.MapBattle;
 using RtsServer.App.Battle.Units;
 using RtsServer.App.FileSystem.Dto;
@@ -24,24 +24,36 @@ namespace RtsServer.App.Battle.Navigator
             return this;
         }
 
-        public async void Start()
+        public void Start()
         {
-            // Блокируем перемещение на воду
-            if (Map.GetArrayMap()[Unit.TargetPosition.X, Unit.TargetPosition.Y].Id == 0)
+            int tx = Unit.TargetPosition.X;
+            int ty = Unit.TargetPosition.Y;
+
+            // Проверка границ карты
+            if (tx < 0 || ty < 0 || tx >= Map.Width || ty >= Map.Length)
                 return;
 
-            // Чистим предыдущий маршрут
-            Unit.PathRoute?.Clear();
+            var targetChunk = Map.GetArrayMap()[tx, ty];
+            // Блокируем перемещение на воду (Id == 0)
+            if (targetChunk.Id == 0)
+                return;
 
-            Vector2Int curPosition = Unit.Position.ToInt();
-            NavWave navWave = new(Map, curPosition, Unit.TargetPosition);
+            // Старт маршрута: если юнит уже едет к какой-то точке — строим путь от неё, иначе от текущей позиции
+            Vector2Int pathStart = Unit.GetPathStartCell();
+            NavWave navWave = new(Map, pathStart, Unit.TargetPosition);
             navWave.Run();
 
-            // Если путь найден — отправляем, но в правильном порядке
-            if (!navWave.IsFail)
-            {
-                await Unit.UpdatePathRouteAsync(navWave.GetRoutePath());
-            }
+            if (navWave.IsFail)
+                return;
+
+            Queue<Vector2Int> route = navWave.GetRoutePath();
+            Vector2Int? currentWaypoint = Unit.GetCurrentWaypoint();
+
+            // Если маршрут построен от текущей waypoint — не сбрасываем её, юнит доедет до неё и пойдёт по новому пути
+            if (currentWaypoint.HasValue && route.Count > 0 && route.Peek() == currentWaypoint.Value)
+                Unit.SetPathRouteFromWaypoint(route);
+            else
+                Unit.SetPathRoute(route);
         }
 
     }

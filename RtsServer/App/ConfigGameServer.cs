@@ -1,4 +1,4 @@
-﻿namespace RtsServer.App
+namespace RtsServer.App
 {
     public static class ConfigGameServer
     {
@@ -12,8 +12,24 @@
         public const bool IsDebugTimeUpdate = false;
         // Проверка статуса чанков
         public const bool IsDebugChunkStatus = false;
-        
+
+        // Порт TCP-сервера
+        public const int Port = 7912;
+
+        /// <summary>
+        /// Включить веб-дашборд отладки (состояние игр, игроки, очереди).
+        /// Открыть в браузере: http://localhost:{DebugDashboardPort}
+        /// </summary>
+        public const bool IsDebugDashboardEnabled = true;
+        public const int DebugDashboardPort = 5050;
+
         public const bool IsEnabledClearConsole = false;
+
+        /// <summary>
+        /// true — использовать in-memory мок БД (без MySQL).
+        /// false — использовать реальную MySQL.
+        /// </summary>
+        public const bool UseMockDatabase = true;
 
         // Запустить одиночный тестовый
         public const bool IsTestBattle = true;

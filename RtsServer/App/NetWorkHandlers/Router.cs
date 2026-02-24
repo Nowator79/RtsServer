@@ -1,4 +1,4 @@
-﻿using RtsServer.App.NetWork.Tcp;
+using RtsServer.App.NetWork.Tcp;
 using RtsServer.App.NetWorkDto.Response;
 using RtsServer.App.NetWorkHandlers.Auth;
 using RtsServer.App.NetWorkHandlers.Game;
@@ -35,6 +35,14 @@ namespace RtsServer.App.NetWorkHandlers
             if (mainResponse == null || string.IsNullOrEmpty(mainResponse.Action))
             {
                 Console.WriteLine("[Router] Получен некорректный запрос");
+                return;
+            }
+
+            // Для всех не-auth экшенов требуем авторизованного пользователя
+            if (!mainResponse.Action.StartsWith("/auth/", StringComparison.OrdinalIgnoreCase)
+                && clientTcp.User == null)
+            {
+                Console.WriteLine($"[Router] Неавторизованный клиент {clientTcp.Id} попытался вызвать {mainResponse.Action}");
                 return;
             }
 
@@ -83,7 +91,8 @@ namespace RtsServer.App.NetWorkHandlers
             AddProcessor("/gameBattle/get/", new GetGameForUser());
             AddProcessor("/gameBattle/setChunk/", new SetChunkProcessor());
             AddProcessor("/gameBattle/unitSetTarget/", new SetTargetUnitsProcessor());
-            AddProcessor("/gameBattle/unitSetTarget/attack/", new BuildConstructionProcessor());
+            AddProcessor("/gameBattle/unitSetTarget/attack/", new SetAttackTargetUnitsProcessor());
+            AddProcessor("/gameBattle/buildConstruction/", new BuildConstructionProcessor());
         }
 
         private void RegisterChatHandlers()

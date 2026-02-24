@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging;
 using RtsServer.App.Battle.Dto;
 using RtsServer.App.Battle.MapBattle;
 using RtsServer.App.Battle.Navigator;
@@ -99,10 +99,42 @@ namespace RtsServer.App.Battle.Units
             }
         }
 
+        /// <summary>
+        /// Старт для построения маршрута: текущая точка движения (waypoint), если есть, иначе позиция юнита.
+        /// </summary>
+        internal Vector2Int GetPathStartCell() => targetPoint ?? Position.ToInt();
+
+        /// <summary>
+        /// Текущая промежуточная точка маршрута (куда юнит едет сейчас), если есть.
+        /// </summary>
+        internal Vector2Int? GetCurrentWaypoint() => targetPoint;
+
+        /// <summary>
+        /// Устанавливает новый маршрут. Сбрасывает текущую точку — юнит возьмёт первую точку из очереди.
+        /// </summary>
+        public void SetPathRoute(Queue<Vector2Int> route)
+        {
+            PathRoute = route ?? throw new ArgumentNullException(nameof(route));
+            targetPoint = null;
+        }
+
+        /// <summary>
+        /// Устанавливает маршрут, построенный от текущей waypoint: первая точка маршрута — та, к которой уже едем.
+        /// Юнит продолжит до неё, затем пойдёт по остальным точкам. targetPoint не сбрасывается.
+        /// </summary>
+        internal void SetPathRouteFromWaypoint(Queue<Vector2Int> route)
+        {
+            if (route == null || route.Count == 0) return;
+            route.Dequeue(); // первая точка = текущая waypoint, её не дублируем
+            PathRoute = route;
+            // targetPoint не трогаем — юнит продолжает ехать к текущей точке, потом по PathRoute
+        }
+
         public async Task UpdatePathRouteAsync(Queue<Vector2Int> route)
         {
             PathRoute = route ?? throw new ArgumentNullException(nameof(route));
-            return;
+            targetPoint = null;
+            await Task.CompletedTask;
         }
 
         protected virtual void MoveToTarget()

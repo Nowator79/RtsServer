@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging;
 using RtsServer.App.DataBase.Dto;
 using RtsServer.App.NetWorkHandlers;
 using RtsServer.App.NetWorkResponseSender;
@@ -15,13 +15,13 @@ namespace RtsServer.App.NetWork.Tcp
     public abstract class Base : INetWorkServer, IDisposable
     {
         private readonly TcpListener _tcpListener;
-        private readonly ConcurrentBag<UserClientTcp> _users = new();
+        private readonly ConcurrentDictionary<string, UserClientTcp> _users = new();
         private readonly CancellationTokenSource _cancellationTokenSource = new();
         private readonly ILogger<GameServer> _logger;
         protected readonly MainProcessor _processor;
         private bool _disposed;
 
-        public IEnumerable<UserClientTcp> Users => _users;
+        public IEnumerable<UserClientTcp> Users => _users.Values;
 
         public Base(int port, MainProcessor processor, ILogger<GameServer> logger)
         {
@@ -31,10 +31,10 @@ namespace RtsServer.App.NetWork.Tcp
         }
 
         public UserClientTcp? GetClientById(string id) =>
-            _users.FirstOrDefault(n => n.Id == id);
+            _users.TryGetValue(id, out var client) ? client : null;
 
         public UserClientTcp? GetClientByUserAuth(UserAuth user) =>
-            _users.FirstOrDefault(n => n.User == user);
+            _users.Values.FirstOrDefault(n => n.User == user);
 
         public void Run()
         {
@@ -67,7 +67,7 @@ namespace RtsServer.App.NetWork.Tcp
             try
             {
                 var client = new UserClientTcp(tcpClient, this);
-                _users.Add(client);
+                _users.TryAdd(client.Id, client);
                 _logger.LogInformation("Клиент {ClientId} подключен.", client.Id);
                 await client.ListenAsync(_cancellationTokenSource.Token);
             }
@@ -86,9 +86,12 @@ namespace RtsServer.App.NetWork.Tcp
         {
             if (userClient == null) return;
 
-            userClient.Dispose();
-            _users.TryTake(out _);
+            var user = userClient.User;
+            _users.TryRemove(userClient.Id, out _);
             _logger.LogInformation("Клиент {ClientId} отключен.", userClient.Id);
+
+            // Завершаем матч для отключившегося игрока (чтобы матч не жил, если вышел единственный игрок)
+            _processor.GameServer?.OnUserDisconnected(user);
         }
 
         public void Exit()
@@ -108,7 +111,7 @@ namespace RtsServer.App.NetWork.Tcp
             _cancellationTokenSource.Cancel();
             _tcpListener.Stop();
 
-            foreach (var user in _users)
+            foreach (var user in _users.Values)
             {
                 user.Dispose();
             }
