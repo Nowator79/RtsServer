@@ -1,3 +1,4 @@
+using System.Linq;
 using RtsServer.App.FileSystem.Dto;
 using System.Text.Json;
 
@@ -9,6 +10,15 @@ namespace RtsServer.App.FileSystem
         {
             path = Path.Combine(MainFolder, "MapScene");
             format = "json";
+        }
+
+        /// <summary>Возвращает коды карт (имена файлов без расширения) из папки MapScene.</summary>
+        public IEnumerable<string> GetAvailableMapNames()
+        {
+            if (!Directory.Exists(path))
+                return [];
+            return Directory.EnumerateFiles(path, $"*.{format}")
+                .Select(f => Path.GetFileNameWithoutExtension(f));
         }
 
         public FMapScene LoadMapByName(string name)

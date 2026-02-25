@@ -1,7 +1,8 @@
-﻿using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging;
 using RtsServer.App.Adapters;
 using RtsServer.App.Battle.Constructions;
 using RtsServer.App.Battle.Dto;
+using RtsServer.App.Battle.Interfaces;
 using RtsServer.App.Battle.MapBattle;
 using RtsServer.App.Battle.Navigator;
 using RtsServer.App.Battle.Units;
@@ -75,6 +76,8 @@ namespace RtsServer.App.Battle
             SetStatusUsersInGame();
         }
 
+        private const int StartingResources = 300;
+
         public void Start()
         {
             if (Map == null)
@@ -82,6 +85,8 @@ namespace RtsServer.App.Battle
 
             _logger.LogInformation("Starting game {GameId}", Id);
             _isPlaying = true;
+
+            GivePlayersStartingResources();
 
             SendUpdateGameAsync();
 
@@ -96,6 +101,22 @@ namespace RtsServer.App.Battle
             if(!Players.Where(p => p.PlayerState != PlayerStateType.Ready).Any())
             {
                 Start();
+            }
+        }
+
+        private void GivePlayersStartingResources()
+        {
+            foreach (Player player in Players)
+            {
+                IResourceStorage? storage = Constructions
+                    .Where(c => c.OwnerId == player.Id)
+                    .OfType<IResourceStorage>()
+                    .FirstOrDefault();
+                if (storage != null)
+                {
+                    storage.AddResources(StartingResources);
+                    _logger.LogDebug("Player {PlayerId} получил стартовые ресурсы: {Amount}", player.Id, StartingResources);
+                }
             }
         }
 
@@ -206,7 +227,9 @@ namespace RtsServer.App.Battle
         {
             foreach (Construction construction in ConstructionsForAdd)
             {
+                construction.SetId(_constructionNextId++);
                 Constructions.Add(construction);
+                _logger.LogDebug("Construction {ConstructionId} added to game {GameId}", construction.Id, Id);
             }
             ConstructionsForAdd.Clear();
 
@@ -311,18 +334,71 @@ namespace RtsServer.App.Battle
                 return;
             }
 
+            int cost = ConstructionFactory.GetBuildCost(code);
+            if (cost <= 0)
+            {
+                _logger.LogWarning("Unknown building code or zero cost: {Code}", code);
+                return;
+            }
+
+            int totalResources = Players.First(p => p.Id == playerId).GetState().Resources;
+            if (totalResources < cost)
+            {
+                _logger.LogWarning("Player {PlayerId} has insufficient resources: {Resources}, need {Cost} for {Code}", playerId, totalResources, cost, code);
+                return;
+            }
+
+            if (!TrySpendPlayerResources(playerId, cost))
+            {
+                _logger.LogWarning("Failed to spend resources for player {PlayerId}", playerId);
+                return;
+            }
+
             try
             {
                 Construction construction = ConstructionFactory.GetByCode(code, position, playerId);
                 construction.SetGame(this);
                 ConstructionsForAdd.Add(construction);
 
-                _logger.LogInformation("Player {PlayerId} строит здание {Code} на {Pos}", playerId, code, position);
+                _logger.LogInformation("Player {PlayerId} строит здание {Code} на {Pos} (потрачено {Cost})", playerId, code, position, cost);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Ошибка при строительстве здания {Code} игроком {PlayerId}", code, playerId);
+                _logger.LogError(ex, "Ошибка при строительстве здания {Code} игроком {PlayerId}. Возврат ресурсов.", code, playerId);
+                RefundPlayerResources(playerId, cost);
             }
+        }
+
+        private void RefundPlayerResources(int playerId, int amount)
+        {
+            float remaining = amount;
+            foreach (Construction c in Constructions.Where(c => c.OwnerId == playerId))
+            {
+                if (c is not IResourceStorage storage || remaining <= 0) continue;
+                float add = Math.Min(remaining, storage.LimitResources - storage.Resources);
+                if (add <= 0) continue;
+                storage.AddResources(add);
+                remaining -= add;
+                if (remaining <= 0) return;
+            }
+        }
+
+        /// <summary>Списать ресурсы игрока с его хранилищ (штабов и т.д.). Возвращает true, если списание выполнено.</summary>
+        private bool TrySpendPlayerResources(int playerId, int amount)
+        {
+            float remaining = amount;
+            foreach (Construction c in Constructions.Where(c => c.OwnerId == playerId))
+            {
+                if (c is not IResourceStorage storage || remaining <= 0)
+                    continue;
+                float take = Math.Min(remaining, storage.Resources);
+                if (take <= 0) continue;
+                if (storage.TrySpend(take))
+                    remaining -= take;
+                if (remaining <= 0)
+                    return true;
+            }
+            return remaining <= 0;
         }
 
     }

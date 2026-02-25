@@ -1,6 +1,7 @@
-﻿using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging;
 using RtsServer.App.Battle.MapBattle;
 using RtsServer.App.DataBase.Dto;
+using RtsServer.App.FileSystem;
 
 namespace RtsServer.App.Battle
 {
@@ -35,14 +36,48 @@ namespace RtsServer.App.Battle
             MapSceneFactory = new();
             MapScene = new();
 
-            InitMatchTypes();
+            // Коды карт — только из файлов сцен, без загрузки юнитов/построек (без GetAllMapScene).
+            string[] availableMapCodes = GetAvailableMapCodesWithoutLoadingScenes();
+            InitMatchTypes(availableMapCodes);
         }
-        
-        private void InitMatchTypes()
+
+        private MapScene SelectMap(List<MapScene> mapScenes, MatchType matchType)
         {
-            MatchTypes["1v1"] = new MatchType("1v1", 2, ["test"]);
-            MatchTypes["demo"] = new MatchType("demo", 1, ["test"]);
-            MatchTypes["ffa4"] = new MatchType("ffa4", 4, ["test"]);
+            if (!string.IsNullOrEmpty(matchType.PreferredMapCode))
+            {
+                var preferred = mapScenes.FirstOrDefault(s => s.Map.Code == matchType.PreferredMapCode);
+                if (preferred != null)
+                    return preferred;
+            }
+            return mapScenes[rnd.Next(mapScenes.Count)];
+        }
+
+        /// <summary>Читает коды карт из файлов сцен без создания юнитов и построек.</summary>
+        private static string[] GetAvailableMapCodesWithoutLoadingScenes()
+        {
+            var fileManager = new MapSceneFileManager();
+            var codes = new List<string>();
+            foreach (string name in fileManager.GetAvailableMapNames())
+            {
+                try
+                {
+                    string code = fileManager.LoadMapByName(name).MapCode;
+                    if (!string.IsNullOrEmpty(code))
+                        codes.Add(code);
+                }
+                catch
+                {
+                    // пропускаем битые файлы
+                }
+            }
+            return codes.Distinct().ToArray();
+        }
+
+        private void InitMatchTypes(string[] availableMapCodes)
+        {
+            MatchTypes["1v1"] = new MatchType("1v1", 2, availableMapCodes, preferredMapCode: "big_test");
+            MatchTypes["demo"] = new MatchType("demo", 1, availableMapCodes, preferredMapCode: "big_test");
+            MatchTypes["ffa4"] = new MatchType("ffa4", 4, availableMapCodes, preferredMapCode: "big_test");
         }
 
         public void AddUserToQueue(Queue queueData)
@@ -84,7 +119,7 @@ namespace RtsServer.App.Battle
                 return;
             }
 
-            var selectedMap = mapScenes[rnd.Next(mapScenes.Count)];
+            MapScene selectedMap = SelectMap(mapScenes, matchType);
 
             var game = new Game(Games.Count, this, _cancellationToken);
             game.SetMap(selectedMap.Map);
