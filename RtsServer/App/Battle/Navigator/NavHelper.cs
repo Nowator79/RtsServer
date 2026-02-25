@@ -1,4 +1,4 @@
-﻿using RtsServer.App.Battle.Dto;
+using RtsServer.App.Battle.Dto;
 using System.Collections.Generic;
 
 namespace RtsServer.App.Battle.Navigator
@@ -7,7 +7,8 @@ namespace RtsServer.App.Battle.Navigator
     {
         public static float DistanceSQRT(Vector2Int start, Vector2Int end)
         {
-            return (float)(Math.Pow(end.X - start.X, 2) + Math.Pow(end.Y - start.Y, 2));
+            int dx = end.X - start.X, dy = end.Y - start.Y;
+            return (float)(dx * dx + dy * dy);
         }
 
         public static float Distance(Vector2Int start, Vector2Int end)
@@ -31,9 +32,15 @@ namespace RtsServer.App.Battle.Navigator
 
         public static Vector2Int[] GetSafeNear(Vector2Int vector2Int, int width, int length)
         {
-            HashSet<Vector2Int> result = new(GetNear(vector2Int));
-            result.RemoveWhere(item => item.X < 0 || item.Y < 0 || item.X >= width || item.Y >= length);
-            return result.ToArray();
+            var near = GetNear(vector2Int);
+            var list = new List<Vector2Int>(8);
+            for (int i = 0; i < near.Length; i++)
+            {
+                var p = near[i];
+                if (p.X >= 0 && p.Y >= 0 && p.X < width && p.Y < length)
+                    list.Add(p);
+            }
+            return list.ToArray();
         }
 
         public static NavChunk[] GetSortByDistanceChunk(NavChunk[] chunks)
@@ -70,6 +77,8 @@ namespace RtsServer.App.Battle.Navigator
             chunksTmpX.Sort(
                 (x, y) => x.StepsCount.CompareTo(y.StepsCount)
                 );
+            if (chunksTmpP.Count == 0) return chunksTmpX.First();
+            if (chunksTmpX.Count == 0) return chunksTmpP.First();
             NavChunk p = chunksTmpP.First();
             NavChunk x = chunksTmpX.First();
             if (x.StepsCount < p.StepsCount)

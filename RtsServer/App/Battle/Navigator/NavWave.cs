@@ -1,4 +1,4 @@
-﻿using RtsServer.App.Battle.Dto;
+using RtsServer.App.Battle.Dto;
 using RtsServer.App.Battle.MapBattle;
 using RtsServer.App.Battle.MapBattle.ChunksType;
 using System;
@@ -15,7 +15,7 @@ namespace RtsServer.App.Battle.Navigator
         private readonly Vector2Int _startPoint;
         private readonly Vector2Int _endPoint;
 
-        private readonly Queue<Vector2Int> _route = new();
+        private readonly List<Vector2Int> _route = new();
         private HashSet<Vector2Int> _processedPoints = new();
         private HashSet<Vector2Int> _currentWavePoints = new();
         private HashSet<Vector2Int> _nextWavePoints = new();
@@ -43,7 +43,6 @@ namespace RtsServer.App.Battle.Navigator
                 return;
             }
 
-            InitializeTargetRanges();
             CalculateWavePropagation();
             TraceBackPath();
 
@@ -55,7 +54,10 @@ namespace RtsServer.App.Battle.Navigator
 
         public Queue<Vector2Int> GetRoutePath()
         {
-            return new Queue<Vector2Int>(_route.Reverse());
+            _route.Reverse();
+            var queue = new Queue<Vector2Int>(_route);
+            _route.Reverse();
+            return queue;
         }
 
         public void Dispose()
@@ -78,27 +80,17 @@ namespace RtsServer.App.Battle.Navigator
             {
                 for (int y = 0; y < map.Length; y++)
                 {
-                    chunks[x, y] = new NavChunk(
+                    var c = new NavChunk(
                         new Vector2Int(x, y),
                         mapArray[x, y].Height,
                         mapArray[x, y].Id
                     );
+                    c.StepsCount = -1;
+                    chunks[x, y] = c;
                 }
             }
 
             return chunks;
-        }
-
-        private void InitializeTargetRanges()
-        {
-            for (int x = 0; x < _map.Width; x++)
-            {
-                for (int y = 0; y < _map.Length; y++)
-                {
-                    var point = new Vector2Int(x, y);
-                    _mapChunks[x, y].TargetRange = NavHelper.DistanceSQRT(point, _endPoint);
-                }
-            }
         }
 
         private void CalculateWavePropagation()
@@ -113,6 +105,9 @@ namespace RtsServer.App.Battle.Navigator
                     ProcessChunk(point, step);
                 }
 
+                if (_processedPoints.Contains(_endPoint))
+                    break;
+
                 (_currentWavePoints, _nextWavePoints) = (_nextWavePoints, _currentWavePoints);
                 _nextWavePoints.Clear();
                 step++;
@@ -124,7 +119,10 @@ namespace RtsServer.App.Battle.Navigator
             if (_processedPoints.Contains(point)) return;
             _processedPoints.Add(point);
 
-            _mapChunks[point.X, point.Y].StepsCount = step;
+            var chunk = _mapChunks[point.X, point.Y];
+            chunk.StepsCount = step;
+            chunk.TargetRange = NavHelper.DistanceSQRT(point, _endPoint);
+            _mapChunks[point.X, point.Y] = chunk;
 
             var neighbors = GetValidNeighbors(point);
             foreach (var neighbor in neighbors)
@@ -142,7 +140,7 @@ namespace RtsServer.App.Battle.Navigator
 
         private void TraceBackPath()
         {
-            _route.Enqueue(_endPoint);
+            _route.Add(_endPoint);
             TraceBackRecursive(_mapChunks[_endPoint.X, _endPoint.Y]);
         }
 
@@ -153,7 +151,7 @@ namespace RtsServer.App.Battle.Navigator
             var neighbors = GetValidTracebackNeighbors(currentChunk);
             var nextChunk = NavHelper.GetSortForReverseChunk(neighbors, currentChunk.Position.X, currentChunk.Position.Y);
 
-            _route.Enqueue(nextChunk.Position);
+            _route.Add(nextChunk.Position);
 
             if (nextChunk.Position == _startPoint)
             {
@@ -168,11 +166,13 @@ namespace RtsServer.App.Battle.Navigator
         {
             var nearPoints = NavHelper.GetSafeNear(chunk.Position, _map.Width, _map.Length);
             var chunks = NavHelper.GetNavChunksByPoints(nearPoints, _mapChunks)
-                .Where(c => CanMove(c.Position.X, c.Position.Y) ||
-                           (c.Position == _startPoint))
+                .Where(c => c.Position == _startPoint ||
+                            (StepsCountVisited(c) && CanMove(c.Position.X, c.Position.Y)))
                 .ToArray();
             return chunks;
         }
+
+        private bool StepsCountVisited(NavChunk c) => c.StepsCount >= 0;
 
         private bool CanMove(int x, int y)
         {
@@ -220,11 +220,12 @@ namespace RtsServer.App.Battle.Navigator
 
         private void PrintRoute()
         {
+            var routeSet = new HashSet<Vector2Int>(_route);
             for (int x = 0; x < _map.Width; x++)
             {
                 for (int y = 0; y < _map.Length; y++)
                 {
-                    var marker = _route.Contains(_mapChunks[x, y].Position) ? "X" : " ";
+                    var marker = routeSet.Contains(_mapChunks[x, y].Position) ? "X" : " ";
                     Console.Write($"[{marker}]");
                 }
                 Console.WriteLine();
