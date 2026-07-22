@@ -9,14 +9,8 @@ namespace RtsServer.App.NetWorkHandlers.Game.Battle
         {
             context.BattleManager.Games.ForEach(game =>
                 {
-                    try
-                    {
-                        game?.Players
-                        .Where(player => player.UserAuth == clientTcp.User)
-                        .First()
-                        .SetReady();
-                    }
-                    catch (Exception) { /** TODO */}
+                    var player = game?.Players.FirstOrDefault(p => p.UserAuth == clientTcp.User);
+                    player?.SetReady();
                 }
             );
         }

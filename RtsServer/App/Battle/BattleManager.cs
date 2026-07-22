@@ -75,9 +75,9 @@ namespace RtsServer.App.Battle
 
         private void InitMatchTypes(string[] availableMapCodes)
         {
-            MatchTypes["1v1"] = new MatchType("1v1", 2, availableMapCodes, preferredMapCode: "big_test");
-            MatchTypes["demo"] = new MatchType("demo", 1, availableMapCodes, preferredMapCode: "big_test");
-            MatchTypes["ffa4"] = new MatchType("ffa4", 4, availableMapCodes, preferredMapCode: "big_test");
+            MatchTypes["1v1"] = new MatchType("1v1", 2, availableMapCodes, preferredMapCode: "test");
+            MatchTypes["demo"] = new MatchType("demo", 1, availableMapCodes, preferredMapCode: "test");
+            MatchTypes["ffa4"] = new MatchType("ffa4", 4, availableMapCodes, preferredMapCode: "test");
         }
 
         public void AddUserToQueue(Queue queueData)

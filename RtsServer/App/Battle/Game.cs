@@ -22,6 +22,7 @@ namespace RtsServer.App.Battle
         private readonly ILogger<Game> _logger;
         private readonly GroundUnitNavigator _navigator;
         private readonly CancellationTokenSource _cts = new();
+        private readonly object _lifecycleLock = new();
         private bool _disposed;
         private int _unitNextId = 0;
         private int _missileNextId = 0;
@@ -83,10 +84,21 @@ namespace RtsServer.App.Battle
             if (Map == null)
                 throw new InvalidOperationException("Map not set");
 
+            lock (_lifecycleLock)
+            {
+                if (_isPlaying)
+                {
+                    _logger.LogDebug("Game {GameId} is already running; duplicate Start() ignored", Id);
+                    return;
+                }
+
+                _isPlaying = true;
+            }
+
             _logger.LogInformation("Starting game {GameId}", Id);
-            _isPlaying = true;
 
             GivePlayersStartingResources();
+            Players.ForEach(p => p.PlayerState = PlayerStateType.Playing);
 
             SendUpdateGameAsync();
 
@@ -98,7 +110,10 @@ namespace RtsServer.App.Battle
 
         public void TryStart()
         {
-            if(!Players.Where(p => p.PlayerState != PlayerStateType.Ready).Any())
+            if (_isPlaying)
+                return;
+
+            if (!Players.Where(p => p.PlayerState != PlayerStateType.Ready).Any())
             {
                 Start();
             }
@@ -201,26 +216,26 @@ namespace RtsServer.App.Battle
             ClearMissile();
             ClearUnits();
 
-            List<Task> update = [];
-
+            // Все сущности обновляем в одном потоке игрового цикла:
+            // unit.Update() меняет общие коллекции карты (UnitsInPoint), и при
+            // параллельном Task.Run это приводит к гонкам/порче состояния коллекций.
             foreach (Unit unit in Units)
             {
-                update.Add(Task.Run(unit.Update));
+                unit.Update();
             }
 
             foreach (Missile missile in Missiles)
             {
-                update.Add(Task.Run(missile.Update));
+                missile.Update();
             }
 
             foreach (Construction construction in Constructions)
             {
-                update.Add(Task.Run(construction.Update));
+                construction.Update();
             }
 
-            await Task.WhenAll(update);
-
             UpdatePlayersStats();
+            await Task.CompletedTask;
         }
 
         private void ClearConstructions()
@@ -264,11 +279,15 @@ namespace RtsServer.App.Battle
 
         public async Task EndAsync()
         {
-            if (!_isPlaying) return;
+            lock (_lifecycleLock)
+            {
+                if (!_isPlaying) return;
+                _isPlaying = false;
+            }
 
             _logger.LogInformation("Ending game {GameId}", Id);
-            _isPlaying = false;
             _cts.Cancel();
+            UpdateEvent = null;
 
             BattleManager.Games.Remove(this);
 
@@ -292,9 +311,8 @@ namespace RtsServer.App.Battle
             _disposed = true;
 
             _logger.LogInformation("Disposing game {GameId}", Id);
-            _cts.Cancel();
-            _cts.Dispose();
             EndAsync().GetAwaiter().GetResult();
+            _cts.Dispose();
         }
 
         public void AddMissile(Missile missile)

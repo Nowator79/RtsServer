@@ -64,7 +64,7 @@ namespace RtsServer.App.Battle.Units
             }
         }
 
-        public Unit SetTargetPosition(Vector2Int targetPosition)
+        public virtual Unit SetTargetPosition(Vector2Int targetPosition)
         {
             if (targetPosition.X < 0 || targetPosition.Y < 0) return this;
 
