@@ -17,7 +17,7 @@ namespace RtsServer.App.Battle.Units.AttackingPoint
         protected const int KRotationSpeed = 1;
 
         protected double fireCooldown = 1.0;
-        private double _lastShotTime = 0;
+        protected double _lastShotTime = 0;
 
         public virtual void Init()
         {
@@ -73,15 +73,31 @@ namespace RtsServer.App.Battle.Units.AttackingPoint
             {
                 if (RotationToTarget(TargetUnit.Position))
                 {
-                    double now = CurrentUnit.Game.TimeSystem.GetTime();
-                    if (now - _lastShotTime >= fireCooldown)
-                    {
-                        Missile missile = new("tank_shell", CurrentUnit.Position, TargetUnit.Position, 20, 2, Damage, CurrentUnit.Game.TimeSystem, this, CurrentUnit.OwnerId);
-                        CurrentUnit.Game.AddMissile(missile);
-                        _lastShotTime = now;
-                    }
+                    TryFireAt(TargetUnit.Position);
                 }
             }
+        }
+
+        /// <summary>Создаёт снаряд по цели, если кулдаун позволяет.</summary>
+        protected bool TryFireAt(Vector2Float targetPosition, string missileCode = "tank_shell", float missileSpeed = 20f, float explosionRange = 2f)
+        {
+            double now = CurrentUnit.Game.TimeSystem.GetTime();
+            if (now - _lastShotTime < fireCooldown)
+                return false;
+
+            Missile missile = new(
+                missileCode,
+                CurrentUnit.Position,
+                targetPosition,
+                missileSpeed,
+                explosionRange,
+                Damage,
+                CurrentUnit.Game.TimeSystem,
+                this,
+                CurrentUnit.OwnerId);
+            CurrentUnit.Game.AddMissile(missile);
+            _lastShotTime = now;
+            return true;
         }
 
         public virtual void CheckTarget()

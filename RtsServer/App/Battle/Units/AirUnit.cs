@@ -1,9 +1,11 @@
 using RtsServer.App.Battle.Dto;
+using RtsServer.App.Battle.Units.AttackingPoint;
 
 namespace RtsServer.App.Battle.Units
 {
     /// <summary>
     /// Летающий юнит: не останавливается, летит к цели и при сближении уходит на кружение вокруг неё.
+    /// Может атаковать наземные цели из носовой пушки во время пролёта/орбиты.
     /// </summary>
     public class AirUnit : Unit
     {
@@ -26,6 +28,7 @@ namespace RtsServer.App.Battle.Units
             MaxSpeed = 3.0;
             AccelerationForce = 8.0;
             RotationSpeed = 90.0;
+            AttackingPoints = [new AirCannon(this)];
         }
 
         /// <summary>
@@ -42,6 +45,18 @@ namespace RtsServer.App.Battle.Units
             return this;
         }
 
+        public override Unit SetAttackTarget(Unit targetUnit)
+        {
+            base.SetAttackTarget(targetUnit);
+            if (targetUnit == null) return this;
+
+            // Летим кружить вокруг атакуемой цели, чтобы заходить в сектор обстрела.
+            TargetPosition = targetUnit.Position.ToInt();
+            _orbitCenter = targetUnit.Position;
+            _flightMode = FlightMode.FlyToTarget;
+            return this;
+        }
+
         /// <summary>
         /// Пользовательское движение самолёта: без остановок, с режимами полёт к цели / кружение.
         /// </summary>
@@ -50,6 +65,8 @@ namespace RtsServer.App.Battle.Units
             double deltaTime = Game.TimeSystem.GetDelta();
             if (deltaTime <= 0)
                 return;
+
+            FollowAttackTargetOrbit();
 
             // Если цель ещё не задана, просто летим по текущему курсу.
             if (TargetPosition.X < 0 || TargetPosition.Y < 0)
@@ -61,7 +78,6 @@ namespace RtsServer.App.Battle.Units
             Vector2Float toCenter = _orbitCenter - Position;
             double dist = Vector2Float.Distance(Position, _orbitCenter);
 
-            // Переключение режимов
             switch (_flightMode)
             {
                 case FlightMode.FlyToTarget:
@@ -90,10 +106,8 @@ namespace RtsServer.App.Battle.Units
 
                     case FlightMode.Orbit:
                         Vector2Float radial = toCenter.Normalize();
-                        // касательная по часовой стрелке
                         Vector2Float tangential = new Vector2Float(-radial.Y, radial.X);
 
-                        // коррекция радиуса (чтобы держаться около _orbitRadius)
                         double radiusError = dist - _orbitRadius;
                         radiusError = Math.Clamp(radiusError, -1.0, 1.0);
                         Vector2Float radiusCorrection = radial * (float)(-radiusError * 0.4);
@@ -112,9 +126,28 @@ namespace RtsServer.App.Battle.Units
             FlyForward(deltaTime);
         }
 
+        /// <summary>Если есть цель атаки — держим орбиту вокруг её текущей позиции.</summary>
+        private void FollowAttackTargetOrbit()
+        {
+            Unit? attackTarget = null;
+            foreach (BaseAttackingPoint point in AttackingPoints)
+            {
+                if (point.TargetUnit != null && !point.TargetUnit.IsDestroyed)
+                {
+                    attackTarget = point.TargetUnit;
+                    break;
+                }
+            }
+
+            if (attackTarget == null)
+                return;
+
+            _orbitCenter = attackTarget.Position;
+            TargetPosition = attackTarget.Position.ToInt();
+        }
+
         private Vector2Float GetForward2D()
         {
-            // В базовом Unit поворот считается так: VectorByAngle(-Rotation)
             return Vector2Float.VectorByAngle(-Rotation).Normalize();
         }
 
@@ -125,6 +158,8 @@ namespace RtsServer.App.Battle.Units
 
             double angleToTarget = Vector2Float.AngleByVecotrs(forward, targetDir);
             double rotationDirection = Math.Sign(Vector2Float.Cross(forward, targetDir));
+            if (rotationDirection == 0 && angleToTarget > 0.1)
+                rotationDirection = 1;
 
             double rotationStep = RotationSpeed * deltaTime;
             Rotation += -rotationDirection * Math.Min(rotationStep, angleToTarget);
@@ -146,4 +181,3 @@ namespace RtsServer.App.Battle.Units
         }
     }
 }
-

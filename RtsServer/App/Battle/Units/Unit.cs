@@ -80,7 +80,7 @@ namespace RtsServer.App.Battle.Units
             return this;
         }
 
-        public Unit SetAttackTarget(Unit targetUnit)
+        public virtual Unit SetAttackTarget(Unit targetUnit)
         {
             if (targetUnit == null) return this;
 
