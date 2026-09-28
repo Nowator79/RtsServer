@@ -32,14 +32,23 @@ namespace RtsServer.App.Battle.Chat
            return Users.First(user => user.UserAuth == userAuth);
         }
 
-        public void SendMessage(Message message)
+        public async Task SendMessageAsync(Message message, CancellationToken cancellationToken = default)
         {
             Messages.Add(message);
-            List<NetWork.Tcp.UserClientTcp> UsersTcp = Context.TcpServer.Users.ToList();
-            foreach (NetWork.Tcp.UserClientTcp userTcp in UsersTcp)
+            List<NetWork.Tcp.UserClientTcp> usersTcp = Context.TcpServer.Users.ToList();
+            List<Task> tasks = [];
+            foreach (NetWork.Tcp.UserClientTcp userTcp in usersTcp)
             {
-               (new SendMessageSender(userTcp)).SetDate(new NMessage(message.user.UserAuth.Id, message.message)).SendMessage();
+                if (!userTcp.IsConnected())
+                    continue;
+
+                tasks.Add(new SendMessageSender(userTcp)
+                    .SetDate(new NMessage(message.user.UserAuth.Id, message.message))
+                    .SendAsync(cancellationToken));
             }
+
+            if (tasks.Count > 0)
+                await Task.WhenAll(tasks).ConfigureAwait(false);
         }
 
         public List<Message> GetChat()

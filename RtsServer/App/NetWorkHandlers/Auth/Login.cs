@@ -10,25 +10,28 @@ namespace RtsServer.App.NetWorkHandlers.Auth
 {
     public class Login : IProcessor
     {
-        public void Handler(MainResponse response, GameServer context, UserClientTcp clientTcp, CancellationToken cancellationToken)
+        public async Task Handler(MainResponse response, GameServer context, UserClientTcp clientTcp, CancellationToken cancellationToken)
         {
             NUser? userAuth = response.GetBody<NUser>();
-            if (userAuth != null)
-            {
-                using ApplicationContext db = new();
-                UserAuth? AUser = db.Users.FirstOrDefault(
-                    e => e.UserName == userAuth.Value.UserName &&
-                    e.Password == userAuth.Value.Password
-                    );
-                if (AUser == null) return;
-                /// todo
-                AUser.Status.SetInPassive();
-                clientTcp.SetUser(AUser);
+            if (userAuth == null)
+                return;
 
-                new CurUserDataSender(clientTcp).SetDate(Adapters.UserAdapter.Get(clientTcp.User)).SendMessage();
+            using ApplicationContext db = new();
+            UserAuth? AUser = db.Users.FirstOrDefault(
+                e => e.UserName == userAuth.Value.UserName &&
+                e.Password == userAuth.Value.Password
+                );
+            if (AUser == null) return;
+            /// todo
+            AUser.Status.SetInPassive();
+            clientTcp.SetUser(AUser);
 
-                context.GetLogger<Login>().LogInformation("Клиент {ClientId} авторизовался под {UserName}", clientTcp.Id, clientTcp.User.UserName);
-            }
+            await new CurUserDataSender(clientTcp)
+                .SetDate(Adapters.UserAdapter.Get(clientTcp.User))
+                .SendAsync(cancellationToken)
+                .ConfigureAwait(false);
+
+            context.GetLogger<Login>().LogInformation("Клиент {ClientId} авторизовался под {UserName}", clientTcp.Id, clientTcp.User.UserName);
         }
     }
 }

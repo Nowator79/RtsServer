@@ -4,14 +4,12 @@ using RtsServer.App.NetWork.Tcp;
 using RtsServer.App.NetWorkDto;
 using RtsServer.App.NetWorkDto.Response;
 using RtsServer.App.NetWorkResponseSender;
-using System.Collections.Generic;
-using System.Threading;
 
 namespace RtsServer.App.NetWorkHandlers.Game.Chat
 {
     public class Open : IProcessor
     {
-        public void Handler(MainResponse response, GameServer context, UserClientTcp clientTcp, CancellationToken cancellationToken)
+        public async Task Handler(MainResponse response, GameServer context, UserClientTcp clientTcp, CancellationToken cancellationToken)
         {
             User chatUser = new(clientTcp.User);
             context.ChatSystem.AddUser(chatUser);
@@ -33,7 +31,10 @@ namespace RtsServer.App.NetWorkHandlers.Game.Chat
 
             NChat chat = new([.. NUsers], [.. NMessages]);
 
-            new SendAllChatSender(clientTcp).SetDate(chat).SendMessage();
+            await new SendAllChatSender(clientTcp)
+                .SetDate(chat)
+                .SendAsync(cancellationToken)
+                .ConfigureAwait(false);
         }
     }
 }

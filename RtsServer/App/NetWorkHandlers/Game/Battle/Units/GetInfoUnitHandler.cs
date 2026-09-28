@@ -7,7 +7,7 @@ namespace RtsServer.App.NetWorkHandlers.Game
 {
     public class GetInfoUnitHandler : IProcessor
     {
-        public void Handler(MainResponse response, GameServer context, UserClientTcp clientTcp, CancellationToken cancellationToken)
+        public async Task Handler(MainResponse response, GameServer context, UserClientTcp clientTcp, CancellationToken cancellationToken)
         {
             App.Battle.Game? game = context.BattleManager.Games.Find(
                     gameItem =>
@@ -20,21 +20,23 @@ namespace RtsServer.App.NetWorkHandlers.Game
                             if (isThisUser) break;
 
                         }
-         
+
                         return isThisUser;
                     }
                 );
 
             if (game == null) return;
             GetInfoUnit getInfoUnitReq = response.GetBody<GetInfoUnit>();
-          
+
+            if (getInfoUnitReq.UnitId < 0 || getInfoUnitReq.UnitId >= game.Units.Count)
+                return;
+
             var unit = game.Units[getInfoUnitReq.UnitId];
 
-            (new UnitInfoSender(clientTcp)).SetDate(UnitAdapter.Get(unit)).SendMessage();
-            //if (clientTcp.User.Id == unit.PlayerOwner) {
-            //    game.Units[unitID].SetTargetPosition(setTargetUnitsReq.Target);
-            //}
-
+            await new UnitInfoSender(clientTcp)
+                .SetDate(UnitAdapter.Get(unit))
+                .SendAsync(cancellationToken)
+                .ConfigureAwait(false);
         }
     }
 }

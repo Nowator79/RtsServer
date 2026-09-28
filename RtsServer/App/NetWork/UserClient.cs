@@ -60,7 +60,7 @@ namespace RtsServer.App.NetWork.Tcp
                 while (!linkedCts.Token.IsCancellationRequested)
                 {
                     var response = await ReadAsync(linkedCts.Token).ConfigureAwait(false);
-                    _server.GetProcessor().Handler(response, this, cancellationToken);
+                    await _server.GetProcessor().Handler(response, this, linkedCts.Token).ConfigureAwait(false);
                 }
             }
             catch (OperationCanceledException)

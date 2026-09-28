@@ -1,4 +1,4 @@
-﻿using RtsServer.App.Adapters;
+using RtsServer.App.Adapters;
 using RtsServer.App.DataBase;
 using RtsServer.App.DataBase.Dto;
 using RtsServer.App.NetWork.Tcp;
@@ -9,7 +9,7 @@ namespace RtsServer.App.NetWorkHandlers.Auth
 {
     public class Regist : IProcessor
     {
-        public void Handler(MainResponse response, GameServer context, UserClientTcp clientTcp, CancellationToken cancellationToken)
+        public Task Handler(MainResponse response, GameServer context, UserClientTcp clientTcp, CancellationToken cancellationToken)
         {
             NUser? userAuth = response.GetBody<NUser>();
             if (userAuth != null)
@@ -17,11 +17,14 @@ namespace RtsServer.App.NetWorkHandlers.Auth
                 using ApplicationContext db = new();
                 UserAuth? userFind = db.Users.FirstOrDefault(e => e.UserName == userAuth.Value.UserName);
 
-                if (userFind != null) return;
+                if (userFind != null)
+                    return Task.CompletedTask;
 
                 db.Users.AddRange(UserAdapter.Get(userAuth.Value));
                 db.SaveChanges();
             }
+
+            return Task.CompletedTask;
         }
     }
 }

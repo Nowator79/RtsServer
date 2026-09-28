@@ -8,7 +8,7 @@ namespace RtsServer.App.NetWorkHandlers.Game
 {
     public class BuildConstructionProcessor : IProcessor
     {
-        public void Handler(MainResponse response, GameServer context, UserClientTcp clientTcp, CancellationToken cancellationToken)
+        public Task Handler(MainResponse response, GameServer context, UserClientTcp clientTcp, CancellationToken cancellationToken)
         {
             var logger = context.GetLogger<BuildConstructionProcessor>();
 
@@ -20,13 +20,13 @@ namespace RtsServer.App.NetWorkHandlers.Game
             catch (System.Exception ex)
             {
                 logger.LogError(ex, "[BuildConstruction] Не удалось разобрать тело запроса. Body: {Body}", response?.Body);
-                return;
+                return Task.CompletedTask;
             }
 
             if (request == null)
             {
                 logger.LogWarning("[BuildConstruction] Request пустой");
-                return;
+                return Task.CompletedTask;
             }
 
             logger.LogDebug("[BuildConstruction] Запрос: Code={Code}, Position=({X},{Y}), User={UserId}",
@@ -47,11 +47,12 @@ namespace RtsServer.App.NetWorkHandlers.Game
             if (game == null)
             {
                 logger.LogWarning("[BuildConstruction] Игра не найдена для пользователя {UserId}", clientTcp.User?.Id);
-                return;
+                return Task.CompletedTask;
             }
 
             Player player = game.Players.First(p => p.UserAuth == clientTcp.User);
             game.TryBuildConstruction(request.Code, request.Position, player.Id);
+            return Task.CompletedTask;
         }
     }
 }

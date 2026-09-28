@@ -32,7 +32,7 @@ namespace RtsServer.App.NetWorkHandlers
             processorsAll[action] = processor;
         }
 
-        public void Do(MainResponse mainResponse, UserClientTcp clientTcp, CancellationToken cancellationToken)
+        public async Task DoAsync(MainResponse mainResponse, UserClientTcp clientTcp, CancellationToken cancellationToken)
         {
             if (GameServer == null) throw new InvalidOperationException();
             if (mainResponse == null || string.IsNullOrEmpty(mainResponse.Action))
@@ -51,7 +51,7 @@ namespace RtsServer.App.NetWorkHandlers
 
             if (processorsAll.TryGetValue(mainResponse.Action, out var processor))
             {
-                processor.Handler(mainResponse, GameServer, clientTcp, cancellationToken);
+                await processor.Handler(mainResponse, GameServer, clientTcp, cancellationToken).ConfigureAwait(false);
             }
             else
             {

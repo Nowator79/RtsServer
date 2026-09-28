@@ -6,7 +6,7 @@ namespace RtsServer.App.NetWorkHandlers.Game
 {
     public class SetAttackTargetUnitsProcessor : IProcessor
     {
-        public void Handler(MainResponse response, GameServer context, UserClientTcp clientTcp, CancellationToken cancellationToken)
+        public Task Handler(MainResponse response, GameServer context, UserClientTcp clientTcp, CancellationToken cancellationToken)
         {
             App.Battle.Game? game = context.BattleManager.Games.Find(
                     gameItem =>
@@ -19,13 +19,13 @@ namespace RtsServer.App.NetWorkHandlers.Game
                             if (isThisUser) break;
 
                         }
-         
+
                         return isThisUser;
                     }
                 );
             var logger = context.GetLogger<SetAttackTargetUnitsProcessor>();
 
-            if (game == null) return;
+            if (game == null) return Task.CompletedTask;
             SetAttackTargetUnits setTargetUnitsReq = response.GetBody<SetAttackTargetUnits>();
             try
             {
@@ -42,6 +42,8 @@ namespace RtsServer.App.NetWorkHandlers.Game
             {
                 logger.LogError(ex, "Ошибка при установке цели атаки");
             }
+
+            return Task.CompletedTask;
         }
     }
 }

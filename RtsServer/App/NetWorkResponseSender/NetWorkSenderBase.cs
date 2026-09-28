@@ -25,12 +25,6 @@ namespace RtsServer.App.NetWorkResponseSender
             return this;
         }
 
-        [Obsolete("Use SendAsync instead", error: false)]
-        public void SendMessage()
-        {
-            _ = SendAsync(CancellationToken.None); // Fire-and-forget
-        }
-
         public async Task SendAsync(CancellationToken cancellationToken = default)
         {
             if (_disposed)

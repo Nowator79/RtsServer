@@ -7,11 +7,11 @@ namespace RtsServer.App.NetWorkHandlers.Game.Chat
 {
     internal class SendMessage : IProcessor
     {
-        public void Handler(MainResponse response, GameServer context, UserClientTcp clientTcp, CancellationToken cancellationToken)
+        public async Task Handler(MainResponse response, GameServer context, UserClientTcp clientTcp, CancellationToken cancellationToken)
         {
             NMessage NMessage = response.GetBody<NMessage>();
             User user = context.ChatSystem.FindUserByUserAuth(clientTcp.User);
-            context.ChatSystem.SendMessage(new(NMessage.Message, user));
+            await context.ChatSystem.SendMessageAsync(new(NMessage.Message, user), cancellationToken).ConfigureAwait(false);
         }
     }
 }

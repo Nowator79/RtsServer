@@ -234,8 +234,7 @@ namespace RtsServer.App.Battle
                 construction.Update();
             }
 
-            UpdatePlayersStats();
-            await Task.CompletedTask;
+            await UpdatePlayersStatsAsync().ConfigureAwait(false);
         }
 
         private void ClearConstructions()
@@ -333,15 +332,18 @@ namespace RtsServer.App.Battle
             entity.Dispose();
         }
 
-        private void UpdatePlayersStats()
+        private async Task UpdatePlayersStatsAsync()
         {
             List<Task> tasks = [];
-            Players.ForEach(p =>
+            foreach (Player p in Players)
             {
                 NetWork.Tcp.UserClientTcp? userTcp = BattleManager.GameServer.TcpServer.GetClientByUserAuth(p.UserAuth);
-                if (userTcp == null) return;
-                tasks.Add(new PlayerStateSender(userTcp).SetDate(PlayerStateAdapter.Get(p.GetState())).SendAsync());
-            });
+                if (userTcp == null || !userTcp.IsConnected()) continue;
+                tasks.Add(new PlayerStateSender(userTcp).SetDate(PlayerStateAdapter.Get(p.GetState())).SendAsync(_cts.Token));
+            }
+
+            if (tasks.Count > 0)
+                await Task.WhenAll(tasks).ConfigureAwait(false);
         }
 
         public void TryBuildConstruction(string code, Vector2Int position, int playerId)

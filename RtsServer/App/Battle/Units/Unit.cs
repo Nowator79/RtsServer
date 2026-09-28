@@ -157,11 +157,15 @@ namespace RtsServer.App.Battle.Units
             }
 
             IsMoving = true;
-            UpdateSpeed(deltaTime);
 
+            // Сначала разворачиваемся к цели. Пока смотрим не туда — стоим и крутимся на месте.
             if (!RotateTowardsTarget(targetPosition, deltaTime))
+            {
+                CurrentSpeed = 0;
                 return;
+            }
 
+            UpdateSpeed(deltaTime);
             MoveForwardTowards(targetPosition, deltaTime);
         }
 
@@ -215,18 +219,26 @@ namespace RtsServer.App.Battle.Units
             var toTarget = (target - Position).Normalize();
 
             var angleToTarget = Vector2Float.AngleByVecotrs(globalFacing, toTarget);
+            if (double.IsNaN(angleToTarget))
+                return true;
+
+            // Если цель ровно сзади, Cross == 0 — явно выбираем сторону разворота.
             var rotationDirection = Math.Sign(Vector2Float.Cross(globalFacing, toTarget));
+            if (rotationDirection == 0 && angleToTarget > RotationThreshold)
+                rotationDirection = 1;
 
             var rotationStep = RotationSpeed * SpeedAdjustmentFactor * deltaTime;
             Rotation += -rotationDirection * Math.Min(rotationStep, angleToTarget);
 
-            return angleToTarget % 180 < RotationThreshold || double.IsNaN(angleToTarget);
+            // Без % 180: иначе угол ~180° ошибочно считался "выровненным" и техника ехала задом.
+            return angleToTarget < RotationThreshold;
         }
 
         private void MoveForwardTowards(Vector2Float target, double deltaTime)
         {
-            var direction = (target - Position).Normalize();
-            var step = direction * CurrentSpeed * deltaTime;
+            // Движемся только вперёд по курсу корпуса, не "скользим" к цели боком/назад.
+            var forward = Vector2Float.VectorByAngle(-Rotation).Normalize();
+            var step = forward * CurrentSpeed * deltaTime;
             var newPosition = Position + step;
 
             if (Vector2Float.DistanceSQRT(Position, newPosition) >= Vector2Float.DistanceSQRT(Position, target))

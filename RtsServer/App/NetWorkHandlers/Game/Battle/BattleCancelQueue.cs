@@ -1,15 +1,15 @@
-﻿using RtsServer.App.NetWork.Tcp;
+using RtsServer.App.NetWork.Tcp;
 using RtsServer.App.NetWorkDto.Response;
 
 namespace RtsServer.App.NetWorkHandlers.Game.Battle
 {
     public class BattleCancelQueue : IProcessor
     {
-        public void Handler(MainResponse response, GameServer context, UserClientTcp clientTcp, CancellationToken cancellationToken)
+        public Task Handler(MainResponse response, GameServer context, UserClientTcp clientTcp, CancellationToken cancellationToken)
         {
             clientTcp.User.Status.SetInPassive();
             context.BattleManager.RemoveUserForSearch(clientTcp.User);
+            return Task.CompletedTask;
         }
     }
 }
-
