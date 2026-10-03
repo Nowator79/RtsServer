@@ -1,10 +1,17 @@
-﻿using System.Text.Json;
+﻿using System.Text.Encodings.Web;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace RtsServer.App.NetWorkDto.Response
 {
     public class MainResponse
     {
+        private static readonly JsonSerializerOptions BodyJsonOptions = new()
+        {
+            // Unity JsonUtility плохо переваривает \u0022 из default encoder.
+            Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+        };
+
         [JsonPropertyName("Type")]
         public string Type { get; set; }
 
@@ -14,7 +21,7 @@ namespace RtsServer.App.NetWorkDto.Response
         [JsonPropertyName("Status")]
         public string Status { get; set; }
 
-        [JsonIgnore] // Исключаем из автоматической десериализации
+        [JsonIgnore]
         public object BodyObject { get; private set; }
         [JsonPropertyName("Body")]
         public string Body { get; private set; }
@@ -31,11 +38,13 @@ namespace RtsServer.App.NetWorkDto.Response
 
         public MainResponse SetBody<T>(T body)
         {
-            if(Action == "/gameBattle/setGame/")
+            if (body == null)
             {
-                Console.Write("");
+                Body = "";
+                return this;
             }
-            Body = JsonSerializer.Serialize<T>(body);
+
+            Body = JsonSerializer.Serialize(body, body.GetType(), BodyJsonOptions);
             return this;
         }
 

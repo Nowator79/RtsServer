@@ -1,4 +1,4 @@
-﻿using RtsServer.App.Battle.Dto;
+using RtsServer.App.Battle.Dto;
 
 namespace RtsServer.App.NetWorkDto
 {
@@ -7,15 +7,21 @@ namespace RtsServer.App.NetWorkDto
         public int Id { get; set; }
         public string Code { get; set; }
         public Vector2Float Position { get; set; }
-        
-        //public double Rotation { get; set; }
+        /// <summary>Высота над картой.</summary>
+        public float Height { get; set; }
+        /// <summary>Рысканье (yaw) для ориентации модели.</summary>
+        public float RotationYaw { get; set; }
+        /// <summary>Тангаж (pitch) по вектору скорости.</summary>
+        public float RotationPitch { get; set; }
 
-        public NMissile(int Id, string Code, Vector2Float Position)
+        public NMissile(int id, string code, Vector2Float position, float height, float rotationYaw, float rotationPitch)
         {
-            this.Id = Id;
-            this.Code = Code;
-            this.Position = Position;
-            //this.Rotation = Rotation;
+            Id = id;
+            Code = code;
+            Position = position;
+            Height = height;
+            RotationYaw = rotationYaw;
+            RotationPitch = rotationPitch;
         }
     }
 }

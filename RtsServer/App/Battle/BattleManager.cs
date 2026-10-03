@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using RtsServer.App.Battle.Ai;
 using RtsServer.App.Battle.MapBattle;
 using RtsServer.App.DataBase.Dto;
 using RtsServer.App.FileSystem;
@@ -43,6 +44,15 @@ namespace RtsServer.App.Battle
 
         private MapScene SelectMap(List<MapScene> mapScenes, MatchType matchType)
         {
+            if (matchType.PreferredMapCodes is { Count: > 0 })
+            {
+                var preferred = mapScenes
+                    .Where(s => matchType.PreferredMapCodes.Contains(s.Map.Code))
+                    .ToList();
+                if (preferred.Count > 0)
+                    return preferred[rnd.Next(preferred.Count)];
+            }
+
             if (!string.IsNullOrEmpty(matchType.PreferredMapCode))
             {
                 var preferred = mapScenes.FirstOrDefault(s => s.Map.Code == matchType.PreferredMapCode);
@@ -75,9 +85,15 @@ namespace RtsServer.App.Battle
 
         private void InitMatchTypes(string[] availableMapCodes)
         {
-            MatchTypes["1v1"] = new MatchType("1v1", 2, availableMapCodes, preferredMapCode: "test");
-            MatchTypes["demo"] = new MatchType("demo", 1, availableMapCodes, preferredMapCode: "test");
-            MatchTypes["ffa4"] = new MatchType("ffa4", 4, availableMapCodes, preferredMapCode: "test");
+            string[] demoPool = availableMapCodes
+                .Where(c => c is "demo4" or "demo_mountain")
+                .ToArray();
+            if (demoPool.Length == 0)
+                demoPool = availableMapCodes;
+
+            MatchTypes["1v1"] = new MatchType("1v1", 2, availableMapCodes, preferredMapCode: "islands");
+            MatchTypes["demo"] = new MatchType("demo", 1, demoPool, preferredMapCodes: demoPool);
+            MatchTypes["ffa4"] = new MatchType("ffa4", 4, demoPool, preferredMapCodes: demoPool);
         }
 
         public void AddUserToQueue(Queue queueData)
@@ -123,10 +139,24 @@ namespace RtsServer.App.Battle
 
             var game = new Game(Games.Count, this, _cancellationToken);
             game.SetMap(selectedMap.Map);
+            game.ApplySceneSettings(selectedMap);
 
             int id = 0;
             foreach (var user in players)
                 game.Players.Add(new Player(user, id++, game));
+
+            // Demo: один человек + 3 бота (карта demo4 — 4 штаба).
+            if (matchCode == "demo" && game.Players.Count == 1)
+            {
+                while (game.Players.Count < 4)
+                {
+                    var botUser = new UserAuth($"BOT{game.Players.Count}", "bot");
+                    game.Players.Add(new Player(botUser, id++, game)
+                    {
+                        Ai = new BasicExpandAndAttackAi()
+                    });
+                }
+            }
 
             foreach (var unit in selectedMap.Units)
             {
@@ -141,6 +171,13 @@ namespace RtsServer.App.Battle
             }
 
             game.Init();
+
+            // Боты сразу Ready — матч стартует, когда человек тоже готов.
+            foreach (Player p in game.Players)
+            {
+                if (p.Ai != null)
+                    p.SetReady();
+            }
 
             AddGame(game);
         }

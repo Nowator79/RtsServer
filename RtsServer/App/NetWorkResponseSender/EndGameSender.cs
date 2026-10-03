@@ -1,6 +1,6 @@
 ﻿using RtsServer.App.Exceptions;
 using RtsServer.App.NetWork.Tcp;
-using System.Text.Json;
+using RtsServer.App.NetWorkDto.Response;
 
 namespace RtsServer.App.NetWorkResponseSender
 {
@@ -13,7 +13,8 @@ namespace RtsServer.App.NetWorkResponseSender
 
         public override NetWorkSenderBase SetDate(object data)
         {
-            throw new ExceptionBlockedFunction();
+            _response.SetBody(data);
+            return this;
         }
     }
 }

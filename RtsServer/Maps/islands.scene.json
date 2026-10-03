@@ -1,0 +1,41 @@
+﻿{
+	"MapCode": "islands",
+	"StartingResources": 1000,
+	"PlayerStarts": [
+		{
+			"PlayerOwnerNum": 0,
+			"CameraPosition": { "X": 13, "Y": 24 }
+		},
+		{
+			"PlayerOwnerNum": 1,
+			"CameraPosition": { "X": 58, "Y": 24 }
+		}
+	],
+	"Constructions": [
+		{
+			"PlayerOwnerNum": 0,
+			"Code": "HeadquartersConstruction",
+			"Position": { "X": 11, "Y": 22 }
+		},
+		{
+			"PlayerOwnerNum": 1,
+			"Code": "HeadquartersConstruction",
+			"Position": { "X": 56, "Y": 22 }
+		}
+	],
+	"Units": [
+		{ "PlayerOwnerNum": 0, "Code": "TankT1", "Position": { "X": 16, "Y": 21 } },
+		{ "PlayerOwnerNum": 0, "Code": "TankT1", "Position": { "X": 16, "Y": 22 } },
+		{ "PlayerOwnerNum": 0, "Code": "TankT1", "Position": { "X": 16, "Y": 23 } },
+		{ "PlayerOwnerNum": 0, "Code": "Baggy", "Position": { "X": 17, "Y": 21 } },
+		{ "PlayerOwnerNum": 0, "Code": "Baggy", "Position": { "X": 17, "Y": 22 } },
+		{ "PlayerOwnerNum": 0, "Code": "AirUnit", "Position": { "X": 18, "Y": 24 } },
+
+		{ "PlayerOwnerNum": 1, "Code": "TankT1", "Position": { "X": 54, "Y": 21 } },
+		{ "PlayerOwnerNum": 1, "Code": "TankT1", "Position": { "X": 54, "Y": 22 } },
+		{ "PlayerOwnerNum": 1, "Code": "TankT1", "Position": { "X": 54, "Y": 23 } },
+		{ "PlayerOwnerNum": 1, "Code": "Baggy", "Position": { "X": 53, "Y": 21 } },
+		{ "PlayerOwnerNum": 1, "Code": "Baggy", "Position": { "X": 53, "Y": 22 } },
+		{ "PlayerOwnerNum": 1, "Code": "AirUnit", "Position": { "X": 52, "Y": 24 } }
+	]
+}

@@ -1,10 +1,13 @@
 ﻿using RtsServer.App.Battle.Dto;
+using RtsServer.App.Battle.Interfaces;
 using RtsServer.App.Battle.Units.AttackingPoint;
 
 namespace RtsServer.App.Battle.Units
 {
     public class TankT1 : Unit
     {
+        public override ArmorType Armor => ArmorType.Heavy;
+
         public TankT1(Vector2Float position, int playerOwner) : base("TankT1", 2000, 2000, position, playerOwner)
         {
             InitParameters();

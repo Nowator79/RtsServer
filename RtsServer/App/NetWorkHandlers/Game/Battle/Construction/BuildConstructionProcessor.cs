@@ -50,7 +50,19 @@ namespace RtsServer.App.NetWorkHandlers.Game
                 return Task.CompletedTask;
             }
 
-            Player player = game.Players.First(p => p.UserAuth == clientTcp.User);
+            Player? player = game.Players.FirstOrDefault(p => p.UserAuth.Id == clientTcp.User!.Id);
+            if (player == null)
+            {
+                logger.LogWarning("[BuildConstruction] Игрок не найден для пользователя {UserId}", clientTcp.User?.Id);
+                return Task.CompletedTask;
+            }
+
+            if (string.IsNullOrWhiteSpace(request.Code))
+            {
+                logger.LogWarning("[BuildConstruction] Пустой Code в запросе. Body: {Body}", response.Body);
+                return Task.CompletedTask;
+            }
+
             game.TryBuildConstruction(request.Code, request.Position, player.Id);
             return Task.CompletedTask;
         }

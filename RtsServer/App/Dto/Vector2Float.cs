@@ -23,8 +23,12 @@ namespace RtsServer.App.Battle.Dto
             Y = y;
         }
 
+        /// <summary>
+        /// Клетка по мировым координатам. Для центров клеток (x+0.5,y+0.5) нужен Floor,
+        /// иначе Round(*.5) уезжает в соседнюю клетку.
+        /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public Vector2Int ToInt() => new Vector2Int((int)Math.Round(X), (int)Math.Round(Y));
+        public Vector2Int ToInt() => new Vector2Int((int)Math.Floor(X), (int)Math.Floor(Y));
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public double Magnitude() => Math.Sqrt(X * X + Y * Y);

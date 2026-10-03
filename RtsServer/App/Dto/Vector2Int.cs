@@ -14,6 +14,12 @@ namespace RtsServer.App.Battle.Dto
             Y = y;
         }
 
+        public override string ToString() => $"({X},{Y})";
+
+        /// <summary>
+        /// Центр клетки в серверных координатах.
+        /// Клиентский MapGrid смещён на (-0.5,-0.5), поэтому визуальный центр = целые (X,Y).
+        /// </summary>
         public Vector2Float GetFloat()
         {
             return new Vector2Float(X, Y);

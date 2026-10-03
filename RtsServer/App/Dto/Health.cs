@@ -1,11 +1,11 @@
-﻿using RtsServer.App.Battle.Units;
+using RtsServer.App.Battle.Units;
 
 namespace RtsServer.App.Battle.Dto
 {
     public class Health
     {
         public float Value { get; private set; }
-        private int Max;
+        public int Max { get; private set; }
         private BattleEntity _entity;
 
         public Health(int value, int max, BattleEntity entity)

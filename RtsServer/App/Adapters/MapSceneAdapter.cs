@@ -1,4 +1,5 @@
-﻿using RtsServer.App.Battle.Constructions;
+using RtsServer.App.Battle.Constructions;
+using RtsServer.App.Battle.Dto;
 using RtsServer.App.Battle.MapBattle;
 using RtsServer.App.Battle.Units;
 using RtsServer.App.FileSystem;
@@ -11,23 +12,44 @@ namespace RtsServer.App.Adapters
         public static MapScene Get(FMapScene mapScene)
         {
             HashSet<Construction> constructions = new();
-            foreach (FConstruction construction in mapScene.Constructions)
+            if (mapScene.Constructions != null)
             {
-                constructions.Add(ConstructionFactory.GetByCode(construction.Code, construction.Position, construction.PlayerOwnerNum));
+                foreach (FConstruction construction in mapScene.Constructions)
+                {
+                    constructions.Add(ConstructionFactory.GetByCode(construction.Code, construction.Position, construction.PlayerOwnerNum));
+                }
             }
 
             HashSet<Unit> units = new();
-            foreach (FUnit unit in mapScene.Units)
+            if (mapScene.Units != null)
             {
-                units.Add(UnitFactory.GetByCode(unit.Code, unit.Position, unit.PlayerOwnerNum));
+                foreach (FUnit unit in mapScene.Units)
+                {
+                    units.Add(UnitFactory.GetByCode(unit.Code, unit.Position, unit.PlayerOwnerNum));
+                }
             }
 
             MapFileManager mapFileManager = new();
-            return new MapScene(
+            MapScene scene = new(
                 MapAdapter.Get(mapFileManager.LoadMapByCode(mapScene.MapCode)),
                 constructions.ToArray(),
                 units.ToArray()
-                );
+            )
+            {
+                StartingResources = mapScene.StartingResources > 0
+                    ? mapScene.StartingResources
+                    : MapScene.DefaultStartingResources
+            };
+
+            if (mapScene.PlayerStarts != null)
+            {
+                foreach (FPlayerStart playerStart in mapScene.PlayerStarts)
+                {
+                    scene.CameraStartsByPlayer[playerStart.PlayerOwnerNum] = playerStart.CameraPosition;
+                }
+            }
+
+            return scene;
         }
     }
 }

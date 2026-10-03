@@ -95,6 +95,7 @@ namespace RtsServer.App.NetWorkHandlers
             AddProcessor("/gameBattle/unitSetTarget/", new SetTargetUnitsProcessor());
             AddProcessor("/gameBattle/unitSetTarget/attack/", new SetAttackTargetUnitsProcessor());
             AddProcessor("/gameBattle/buildConstruction/", new BuildConstructionProcessor());
+            AddProcessor("/gameBattle/produceUnit/", new ProduceUnitProcessor());
         }
 
         private void RegisterChatHandlers()

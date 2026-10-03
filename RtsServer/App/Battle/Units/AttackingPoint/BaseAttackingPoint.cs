@@ -1,4 +1,7 @@
-﻿using RtsServer.App.Battle.Dto;
+using RtsServer.App.Battle.Constructions;
+using RtsServer.App.Battle.Dto;
+using RtsServer.App.Battle.Interfaces;
+using RtsServer.App.Battle.Tools;
 using RtsServer.App.Battle.Units;
 
 namespace RtsServer.App.Battle.Units.AttackingPoint
@@ -8,10 +11,14 @@ namespace RtsServer.App.Battle.Units.AttackingPoint
         public Unit CurrentUnit { get; protected set; } = currentUnit;
         public double Rotation { get; protected set; } = rotation;
         public Vector2Float? TargetPoint { get; protected set; }
-        public Unit? TargetUnit { get; protected set; }
+        public IAttackTarget? Target { get; protected set; }
         public float Damage { get; protected set; }
         public double SpeedRotation { get; protected set; }
         public float Range { get; protected set; }
+        /// <summary>Какие домены целей может атаковать эта турель.</summary>
+        public AttackTargetDomain AllowedTargetDomains { get; protected set; } = AttackTargetDomain.Surface;
+        /// <summary>Абсолютный урон по Light / Medium / Heavy.</summary>
+        public ArmorDamageProfile ArmorDamage { get; protected set; } = ArmorDamageProfile.Zero;
         protected TypeTarget TypeTargetUnit { get; set; } = TypeTarget.Empty;
 
         protected const int KRotationSpeed = 1;
@@ -26,30 +33,37 @@ namespace RtsServer.App.Battle.Units.AttackingPoint
             Range = 0;
             fireCooldown = 1.0;
             _lastShotTime = 0;
+            // По умолчанию — земля и здания (не воздух).
+            AllowedTargetDomains = AttackTargetDomain.Surface;
+            ArmorDamage = ArmorDamageProfile.Zero;
+        }
+
+        public bool CanEngage(IAttackTarget? target)
+        {
+            if (target == null || target.IsDestroyed)
+                return false;
+            return (AllowedTargetDomains & target.AttackDomain) != 0;
         }
 
         public void Update()
         {
-            // Потеря цели, если она вышла за пределы радиуса
             if (
-                TargetUnit != null &&
-                !Vector2Float.ReachDistance(CurrentUnit.Position, TargetUnit.Position, Range)
+                Target != null &&
+                !Vector2Float.ReachDistance(CurrentUnit.Position, Target.AimPosition, Range)
             )
             {
-                TargetUnit.OnDestroyAction -= LoseTarget;
-                TargetUnit = null;
+                Target.OnDestroyAction -= LoseTarget;
+                Target = null;
                 TypeTargetUnit = TypeTarget.Empty;
             }
 
-            // Потеря уничтоженное цели
-            if (TargetUnit != null && TargetUnit.IsDestroyed)
+            if (Target != null && Target.IsDestroyed)
             {
                 LoseTarget();
             }
 
-            // Потеря цели, если точка обнулена
             if (
-                TargetUnit == null &&
+                Target == null &&
                 TargetPoint.HasValue &&
                 TargetPoint.Value != Vector2Float.Zero &&
                 TypeTargetUnit != TypeTarget.Empty
@@ -58,8 +72,7 @@ namespace RtsServer.App.Battle.Units.AttackingPoint
                 TypeTargetUnit = TypeTarget.Empty;
             }
 
-            // Если нет цели, вращаем башню к направлению корпуса
-            if (TargetUnit == null && TypeTargetUnit == TypeTarget.Empty)
+            if (Target == null && TypeTargetUnit == TypeTarget.Empty)
             {
                 RotateToUnitDirection();
             }
@@ -69,32 +82,85 @@ namespace RtsServer.App.Battle.Units.AttackingPoint
 
         protected virtual void Attack()
         {
-            if (TypeTargetUnit == TypeTarget.Unit && TargetUnit != null)
+            if (TypeTargetUnit == TypeTarget.Unit && Target != null)
             {
-                if (RotationToTarget(TargetUnit.Position))
+                if (RotationToTarget(Target.AimPosition))
                 {
-                    TryFireAt(TargetUnit.Position);
+                    TryFireAt(Target.AimPosition);
                 }
             }
         }
 
-        /// <summary>Создаёт снаряд по цели, если кулдаун позволяет.</summary>
-        protected bool TryFireAt(Vector2Float targetPosition, string missileCode = "tank_shell", float missileSpeed = 20f, float explosionRange = 2f)
+        protected bool TryFireAt(
+            Vector2Float targetPosition,
+            string missileCode = "tank_shell",
+            float missileSpeed = 20f,
+            float explosionRange = 2f,
+            double? targetHeightOverride = null,
+            bool guided = false,
+            bool flatTrajectory = false,
+            bool preferLowArc = true)
         {
             double now = CurrentUnit.Game.TimeSystem.GetTime();
             if (now - _lastShotTime < fireCooldown)
                 return false;
 
+            double fromHeight = CurrentUnit.GetMuzzleHeight();
+            double toHeight = targetHeightOverride
+                ?? (Target != null ? Target.GetBodyHeight() : 0.5);
+
+            Vector3Float velocity;
+            if (guided || flatTrajectory)
+            {
+                // Прямой выстрел без баллистической дуги (трассеры / самонаведение).
+                Vector3Float toTarget = new(
+                    targetPosition.X - CurrentUnit.Position.X,
+                    targetPosition.Y - CurrentUnit.Position.Y,
+                    toHeight - fromHeight);
+                double mag = toTarget.Magnitude();
+                if (mag < 1e-6)
+                {
+                    Vector2Float fwd = Vector2Float.VectorByAngle(-CurrentUnit.Rotation).Normalize();
+                    velocity = new Vector3Float(fwd.X * missileSpeed, fwd.Y * missileSpeed, flatTrajectory ? 0 : -0.5);
+                }
+                else
+                {
+                    Vector3Float dir = toTarget.Normalized();
+                    velocity = dir * missileSpeed;
+                }
+            }
+            else if (!Ballistics.TryComputeLaunchVelocity(
+                    CurrentUnit.Position,
+                    fromHeight,
+                    targetPosition,
+                    toHeight,
+                    missileSpeed,
+                    out velocity,
+                    preferLowArc))
+            {
+                return false;
+            }
+
             Missile missile = new(
                 missileCode,
                 CurrentUnit.Position,
+                fromHeight,
+                velocity,
                 targetPosition,
+                toHeight,
                 missileSpeed,
                 explosionRange,
                 Damage,
                 CurrentUnit.Game.TimeSystem,
                 this,
-                CurrentUnit.OwnerId);
+                CurrentUnit.OwnerId,
+                CurrentUnit.Game,
+                lockTarget: Target,
+                guided: guided,
+                shooterUnitId: CurrentUnit.Id,
+                applyGravity: !flatTrajectory && !guided,
+                armorDamage: ArmorDamage);
+
             CurrentUnit.Game.AddMissile(missile);
             _lastShotTime = now;
             return true;
@@ -102,37 +168,73 @@ namespace RtsServer.App.Battle.Units.AttackingPoint
 
         public virtual void CheckTarget()
         {
-            if (TargetUnit != null) return;
+            if (Target != null)
+            {
+                // Цель стала недопустимой (смена правил / тип) — сбросить.
+                if (!CanEngage(Target))
+                    ClearTarget();
+                else
+                    return;
+            }
+            if (!CurrentUnit.CanAutoAcquireTargets) return;
+
+            IAttackTarget? best = null;
+            double bestDist = Range;
+
             foreach (Unit unit in CurrentUnit.Game.Units)
             {
                 if (unit == CurrentUnit) continue;
                 if (unit.OwnerId == CurrentUnit.OwnerId) continue;
-                if (Vector2Float.ReachDistance(CurrentUnit.Position, unit.Position, Range))
-                {
-                    SetTarget(unit);
-                    break;
-                }
+                if (!CanEngage(unit)) continue;
+                double dist = Vector2Float.Distance(CurrentUnit.Position, unit.AimPosition);
+                if (dist >= bestDist) continue;
+                bestDist = dist;
+                best = unit;
             }
+
+            foreach (Construction construction in CurrentUnit.Game.Constructions)
+            {
+                if (construction.OwnerId == CurrentUnit.OwnerId) continue;
+                if (construction.IsDestroyed) continue;
+                if (!CanEngage(construction)) continue;
+                double dist = Vector2Float.Distance(CurrentUnit.Position, construction.AimPosition);
+                if (dist >= bestDist) continue;
+                bestDist = dist;
+                best = construction;
+            }
+
+            if (best != null)
+                SetTarget(best);
         }
 
         public virtual void SetTarget(Vector2Float targetPoint)
         {
             TargetPoint = targetPoint;
-            TargetUnit = null;
+            Target = null;
             TypeTargetUnit = TypeTarget.Position;
         }
 
-        public virtual void SetTarget(Unit targetUnit)
+        public virtual void SetTarget(IAttackTarget target)
         {
+            if (!CanEngage(target))
+                return;
+
             TargetPoint = null;
-            TargetUnit = targetUnit;
-            targetUnit.OnDestroyAction += LoseTarget;
+            Target = target;
+            target.OnDestroyAction += LoseTarget;
             TypeTargetUnit = TypeTarget.Unit;
+        }
+
+        public void ClearTarget()
+        {
+            if (Target != null)
+                Target.OnDestroyAction -= LoseTarget;
+            LoseTarget();
         }
 
         protected virtual void LoseTarget()
         {
-            TargetUnit = null;
+            Target = null;
             TargetPoint = null;
             TypeTargetUnit = TypeTarget.Empty;
         }

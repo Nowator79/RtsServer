@@ -1,4 +1,5 @@
-﻿using RtsServer.App.Battle.Interfaces;
+using RtsServer.App.Battle.Ai;
+using RtsServer.App.Battle.Interfaces;
 using RtsServer.App.DataBase.Dto;
 
 namespace RtsServer.App.Battle
@@ -9,6 +10,15 @@ namespace RtsServer.App.Battle
         public UserAuth UserAuth { get; }
         public int Id { get; private set; }
         public PlayerStateType PlayerState { get; set; }
+
+        /// <summary>
+        /// Опциональный ИИ. Если задан — <see cref="Game"/> вызывает <see cref="IPlayerAi.Tick"/> каждый тик.
+        /// Можно подставить любую реализацию поведения.
+        /// </summary>
+        public IPlayerAi? Ai { get; set; }
+
+        public bool IsBot => Ai != null;
+
         public Player(UserAuth UserAuth, int Id, Game Game)
         {
             this.UserAuth = UserAuth;
@@ -16,36 +26,45 @@ namespace RtsServer.App.Battle
             this.Game = Game;
             PlayerState = PlayerStateType.None;
         }
+
         public ResourcesPlayer GetState()
         {
             ResourcesPlayer State = new();
 
             float resources = 0;
             float resourcesMax = 0;
-            Game.Constructions.Where(c => c.OwnerId == Id).ToList().ForEach(c =>
-            {
-                if (c is IResourceStorage resourceProducer)
-                {
-                    resources += resourceProducer.Resources;
-                    resourcesMax += resourceProducer.LimitResources;
-                }
-                if(c is IEnergyProvider energyProvider)
-                {
-                    State.LimitEnergy = energyProvider.EnergyProvided;
-                }
-            });
+            int useEnergy = 0;
+            int limitEnergy = 0;
 
-            State.UseEnergy = 0;
+            foreach (var c in Game.Constructions.Where(c => c.OwnerId == Id && !c.IsDestroyed))
+            {
+                if (!c.IsBuilt) continue;
+
+                if (c is IResourceStorage storage)
+                {
+                    resources += storage.Resources;
+                    resourcesMax += storage.LimitResources;
+                }
+                if (c is IEnergyProvider energyProvider)
+                    limitEnergy += energyProvider.EnergyProvided;
+                if (c is IEnergyConsumer energyConsumer)
+                    useEnergy += energyConsumer.EnergyRequired;
+            }
+
+            State.UseEnergy = useEnergy;
+            State.LimitEnergy = limitEnergy;
             State.Resources = (int)resources;
             State.MaxResources = (int)resourcesMax;
-            
+
             return State;
         }
+
         public void SetReady()
         {
             PlayerState = PlayerStateType.Ready;
             Game.TryStart();
         }
+
         public struct ResourcesPlayer
         {
             public int Resources;
@@ -53,6 +72,7 @@ namespace RtsServer.App.Battle
             public int UseEnergy;
             public int LimitEnergy;
         }
+
         public enum PlayerStateType
         {
             None,

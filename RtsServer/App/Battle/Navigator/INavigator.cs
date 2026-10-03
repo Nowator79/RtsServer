@@ -5,9 +5,13 @@ namespace RtsServer.App.Battle.Navigator
 {
     public interface INavigator
     {
-        public INavigator SetMap(Map map);
-        public INavigator SetUnit(Unit unit);
-        public void Start();
-
+        INavigator SetMap(Map map);
+        INavigator SetUnit(Unit unit);
+        /// <summary>Новый приказ: можно сдвинуть финиш на свободную клетку.</summary>
+        void Start();
+        /// <summary>Новый приказ с soft-резервацией коридоров (групповой ход).</summary>
+        void Start(PathReservationMap? reservations);
+        /// <summary>Перестроение пути к текущей TargetPosition без смены финиша (пробки).</summary>
+        void StartRepath();
     }
 }

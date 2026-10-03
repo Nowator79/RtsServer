@@ -13,6 +13,8 @@ namespace RtsServer.App.Battle
         public List<string> AllowedMapCodes { get; set; } = new();
         /// <summary>Если задан и карта есть в списке — выбирается она, иначе случайная.</summary>
         public string? PreferredMapCode { get; set; }
+        /// <summary>Пул предпочтительных карт (случайный выбор). Имеет приоритет над PreferredMapCode.</summary>
+        public List<string> PreferredMapCodes { get; set; } = new();
 
         public MatchType(string code, int playersRequired, IEnumerable<string> mapCodes, string? preferredMapCode = null)
         {
@@ -20,6 +22,18 @@ namespace RtsServer.App.Battle
             PlayersRequired = playersRequired;
             AllowedMapCodes = new List<string>(mapCodes);
             PreferredMapCode = preferredMapCode;
+        }
+
+        public MatchType(
+            string code,
+            int playersRequired,
+            IEnumerable<string> mapCodes,
+            IEnumerable<string> preferredMapCodes)
+        {
+            Code = code;
+            PlayersRequired = playersRequired;
+            AllowedMapCodes = new List<string>(mapCodes);
+            PreferredMapCodes = preferredMapCodes?.ToList() ?? new List<string>();
         }
     }
 }

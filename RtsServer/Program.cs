@@ -1,6 +1,15 @@
-    using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging;
 using RtsServer.App;
+using RtsServer.App.Battle.Sim;
 using RtsServer.App.DebugDashboard;
+
+// Headless автотест движения (без TCP):
+//   dotnet run --project Server/RtsServer -- --sim-movement
+if (args.Any(a => a is "--sim-movement" or "sim-movement"))
+{
+    Environment.ExitCode = MovementSimulation.Run();
+    return;
+}
 
 // Конфигурация логгера
 using var loggerFactory = LoggerFactory.Create(builder =>

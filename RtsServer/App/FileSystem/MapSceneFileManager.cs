@@ -65,7 +65,9 @@ namespace RtsServer.App.FileSystem
             {
                 MapCode = name,
                 Constructions = Array.Empty<FConstruction>(),
-                Units = Array.Empty<FUnit>()
+                Units = Array.Empty<FUnit>(),
+                StartingResources = 1000,
+                PlayerStarts = Array.Empty<FPlayerStart>()
             };
         }
     }

@@ -1,236 +1,273 @@
+using RtsServer.App.Battle.Constructions;
 using RtsServer.App.Battle.Dto;
 using RtsServer.App.Battle.MapBattle;
 using RtsServer.App.Battle.MapBattle.ChunksType;
-using System;
-using System.Collections.Generic;
-using System.Linq;
+using RtsServer.App.Battle.Units;
 
 namespace RtsServer.App.Battle.Navigator
 {
+    /// <summary>
+    /// A* по сетке. Без полной копии карты на каждый поиск (критично на больших картах).
+    /// </summary>
     public sealed class NavWave : IDisposable
     {
-        private const int DebugColumnWidth = 4;
+        /// <summary>Кардинальный шаг дешевле диагонали — меньше зигзага.</summary>
+        private const int CardinalStepCost = 10;
+        private const int DiagonalStepCost = 14;
+        /// <summary>Защита от патологического раздувания на огромных картах.</summary>
+        private const int MaxExpansions = 120_000;
+
+        private static readonly int[] NeighborDx = { -1, 0, 1, -1, 1, -1, 0, 1 };
+        private static readonly int[] NeighborDy = { -1, -1, -1, 0, 0, 1, 1, 1 };
+
         private readonly Map _map;
-        private readonly NavChunk[,] _mapChunks;
         private readonly Vector2Int _startPoint;
         private readonly Vector2Int _endPoint;
+        private readonly Unit? _self;
+        private readonly Func<Vector2Int, int>? _extraCost;
 
         private readonly List<Vector2Int> _route = new();
-        private HashSet<Vector2Int> _processedPoints = new();
-        private HashSet<Vector2Int> _currentWavePoints = new();
-        private HashSet<Vector2Int> _nextWavePoints = new();
+        private Vector2Int?[,] _cameFrom = null!;
+        private bool[,] _settled = null!;
+        private int[,] _best = null!;
+        private bool[,]? _constructionBlocked;
+        private ChunkBase[,]? _tiles;
 
-        private bool _isFinished;
         private bool _disposed;
 
         public bool IsFail { get; private set; }
 
-        public NavWave(Map map, Vector2Int startPoint, Vector2Int endPoint)
+        public NavWave(
+            Map map,
+            Vector2Int startPoint,
+            Vector2Int endPoint,
+            Unit? self = null,
+            Func<Vector2Int, int>? extraCost = null)
         {
             _map = map ?? throw new ArgumentNullException(nameof(map));
             _startPoint = startPoint;
             _endPoint = endPoint;
-
-            // Инициализация карты навигации
-            _mapChunks = InitializeNavChunks(map);
+            _self = self;
+            _extraCost = extraCost;
         }
 
         public void Run()
         {
-            if (!CanMove(_endPoint.X, _endPoint.Y))
+            _tiles = _map.GetArrayMap();
+            BuildConstructionBlocked();
+
+            // Финиш должен быть проходимой землёй (стоячие чужие юниты — как раньше — блок).
+            if (!CanEnter(_endPoint.X, _endPoint.Y, ignoreParkedUnits: false)
+                && !IsStartCell(_endPoint.X, _endPoint.Y))
             {
                 IsFail = true;
                 return;
             }
 
-            CalculateWavePropagation();
-            TraceBackPath();
-
-            if (ConfigGameServer.IsDebugGameNavUpdate)
+            if (!CalculateAStar())
             {
-                PrintDebugInfo();
+                IsFail = true;
+                return;
             }
+
+            TraceBackPath();
         }
 
-        public Queue<Vector2Int> GetRoutePath()
-        {
-            _route.Reverse();
-            var queue = new Queue<Vector2Int>(_route);
-            _route.Reverse();
-            return queue;
-        }
+        public Queue<Vector2Int> GetRoutePath() => new(_route);
 
         public void Dispose()
         {
             if (_disposed) return;
             _disposed = true;
-
-            _processedPoints.Clear();
-            _currentWavePoints.Clear();
-            _nextWavePoints.Clear();
             _route.Clear();
+            _cameFrom = null!;
+            _settled = null!;
+            _best = null!;
+            _constructionBlocked = null;
+            _tiles = null;
         }
 
-        private NavChunk[,] InitializeNavChunks(Map map)
+        private void BuildConstructionBlocked()
         {
-            var chunks = new NavChunk[map.Width, map.Length];
-            var mapArray = map.GetArrayMap();
+            int w = _map.Width;
+            int h = _map.Length;
+            _constructionBlocked = new bool[w, h];
 
-            for (int x = 0; x < map.Width; x++)
+            Game? game = _self?.Game;
+            if (game == null)
+                return;
+
+            MarkConstructions(game.Constructions, w, h);
+            MarkConstructions(game.ConstructionsForAdd, w, h);
+        }
+
+        private void MarkConstructions(IEnumerable<Construction> list, int w, int h)
+        {
+            foreach (Construction c in list)
             {
-                for (int y = 0; y < map.Length; y++)
+                if (c == null || c.IsDestroyed)
+                    continue;
+
+                Vector2Int origin = c.Position.ToInt();
+                int sx = Math.Max(1, c.Size.X);
+                int sy = Math.Max(1, c.Size.Y);
+                int maxX = Math.Min(w, origin.X + sx);
+                int maxY = Math.Min(h, origin.Y + sy);
+                for (int x = Math.Max(0, origin.X); x < maxX; x++)
                 {
-                    var c = new NavChunk(
-                        new Vector2Int(x, y),
-                        mapArray[x, y].Height,
-                        mapArray[x, y].Id
-                    );
-                    c.StepsCount = -1;
-                    chunks[x, y] = c;
+                    for (int y = Math.Max(0, origin.Y); y < maxY; y++)
+                        _constructionBlocked![x, y] = true;
+                }
+            }
+        }
+
+        private bool CalculateAStar()
+        {
+            int w = _map.Width;
+            int h = _map.Length;
+            _cameFrom = new Vector2Int?[w, h];
+            _settled = new bool[w, h];
+            _best = new int[w, h];
+
+            // -1 = не посещали (вместо заполнения MaxValue — один проход всё равно нужен).
+            for (int x = 0; x < w; x++)
+            {
+                for (int y = 0; y < h; y++)
+                    _best[x, y] = -1;
+            }
+
+            var open = new PriorityQueue<Vector2Int, int>();
+            _best[_startPoint.X, _startPoint.Y] = 0;
+            open.Enqueue(_startPoint, Heuristic(_startPoint, _endPoint));
+
+            int expansions = 0;
+
+            while (open.Count > 0)
+            {
+                open.TryDequeue(out Vector2Int point, out _);
+                if (_settled[point.X, point.Y])
+                    continue;
+
+                _settled[point.X, point.Y] = true;
+                expansions++;
+                if (expansions > MaxExpansions)
+                    return false;
+
+                int g = _best[point.X, point.Y];
+                if (point.Equals(_endPoint))
+                    return true;
+
+                for (int i = 0; i < 8; i++)
+                {
+                    int nx = point.X + NeighborDx[i];
+                    int ny = point.Y + NeighborDy[i];
+                    if (nx < 0 || ny < 0 || nx >= w || ny >= h)
+                        continue;
+                    if (_settled[nx, ny])
+                        continue;
+
+                    bool diagonal = NeighborDx[i] != 0 && NeighborDy[i] != 0;
+                    if (diagonal
+                        && (!CanEnter(nx, point.Y, ignoreParkedUnits: false)
+                            || !CanEnter(point.X, ny, ignoreParkedUnits: false)))
+                        continue;
+
+                    if (!CanEnter(nx, ny, ignoreParkedUnits: false))
+                        continue;
+
+                    int stepCost = (diagonal ? DiagonalStepCost : CardinalStepCost) + GetExtraCost(nx, ny);
+                    if (stepCost < 1) stepCost = 1;
+
+                    int ng = g + stepCost;
+                    int prev = _best[nx, ny];
+                    if (prev >= 0 && ng >= prev)
+                        continue;
+
+                    _best[nx, ny] = ng;
+                    _cameFrom[nx, ny] = point;
+                    int f = ng + Heuristic(new Vector2Int(nx, ny), _endPoint);
+                    open.Enqueue(new Vector2Int(nx, ny), f);
                 }
             }
 
-            return chunks;
+            return _best[_endPoint.X, _endPoint.Y] >= 0;
         }
 
-        private void CalculateWavePropagation()
+        private static int Heuristic(Vector2Int a, Vector2Int b)
         {
-            int step = 0;
-            _currentWavePoints.Add(_startPoint);
-
-            while (_currentWavePoints.Count > 0)
-            {
-                foreach (var point in _currentWavePoints)
-                {
-                    ProcessChunk(point, step);
-                }
-
-                if (_processedPoints.Contains(_endPoint))
-                    break;
-
-                (_currentWavePoints, _nextWavePoints) = (_nextWavePoints, _currentWavePoints);
-                _nextWavePoints.Clear();
-                step++;
-            }
+            int dx = Math.Abs(a.X - b.X);
+            int dy = Math.Abs(a.Y - b.Y);
+            // Octile, согласованный с 10/14.
+            return 10 * (dx + dy) + (DiagonalStepCost - 2 * CardinalStepCost) * Math.Min(dx, dy);
         }
 
-        private void ProcessChunk(Vector2Int point, int step)
+        private int GetExtraCost(int x, int y)
         {
-            if (_processedPoints.Contains(point)) return;
-            _processedPoints.Add(point);
-
-            var chunk = _mapChunks[point.X, point.Y];
-            chunk.StepsCount = step;
-            chunk.TargetRange = NavHelper.DistanceSQRT(point, _endPoint);
-            _mapChunks[point.X, point.Y] = chunk;
-
-            var neighbors = GetValidNeighbors(point);
-            foreach (var neighbor in neighbors)
-            {
-                _nextWavePoints.Add(neighbor.Position);
-            }
-        }
-
-        private IEnumerable<NavChunk> GetValidNeighbors(Vector2Int point)
-        {
-            var nearPoints = NavHelper.GetSafeNear(point, _map.Width, _map.Length);
-            var chunks = NavHelper.GetNavChunksByPoints(nearPoints, _mapChunks);
-            return chunks.Where(chunk => CanMove(chunk.Position.X, chunk.Position.Y));
+            if (_extraCost == null) return 0;
+            int extra = _extraCost(new Vector2Int(x, y));
+            return extra > 0 ? extra : 0;
         }
 
         private void TraceBackPath()
         {
-            _route.Add(_endPoint);
-            TraceBackRecursive(_mapChunks[_endPoint.X, _endPoint.Y]);
-        }
-
-        private void TraceBackRecursive(NavChunk currentChunk, int maxDepth = 200)
-        {
-            if (maxDepth <= 0 || _isFinished) return;
-
-            var neighbors = GetValidTracebackNeighbors(currentChunk);
-            var nextChunk = NavHelper.GetSortForReverseChunk(neighbors, currentChunk.Position.X, currentChunk.Position.Y);
-
-            _route.Add(nextChunk.Position);
-
-            if (nextChunk.Position == _startPoint)
-            {
-                _isFinished = true;
+            _route.Clear();
+            if (_best[_endPoint.X, _endPoint.Y] < 0)
                 return;
-            }
 
-            TraceBackRecursive(nextChunk, maxDepth - 1);
-        }
+            var stack = new Stack<Vector2Int>();
+            Vector2Int current = _endPoint;
+            stack.Push(current);
 
-        private NavChunk[] GetValidTracebackNeighbors(NavChunk chunk)
-        {
-            var nearPoints = NavHelper.GetSafeNear(chunk.Position, _map.Width, _map.Length);
-            var chunks = NavHelper.GetNavChunksByPoints(nearPoints, _mapChunks)
-                .Where(c => c.Position == _startPoint ||
-                            (StepsCountVisited(c) && CanMove(c.Position.X, c.Position.Y)))
-                .ToArray();
-            return chunks;
-        }
-
-        private bool StepsCountVisited(NavChunk c) => c.StepsCount >= 0;
-
-        private bool CanMove(int x, int y)
-        {
-            var chunk = _map.GetArrayMap()[x, y];
-            return chunk.Height == 1 && chunk.UnitsInPoint.Count == 0;
-        }
-
-        private void PrintDebugInfo()
-        {
-            if (ConfigGameServer.IsEnabledClearConsole)
-                Console.Clear();
-
-            PrintGrid("StepsCount:", c => c.StepsCount);
-            PrintGrid("Height:", c => c.Height);
-            PrintGrid("TargetRange:", c => Convert.ToInt32(c.TargetRange));
-            PrintRoute();
-        }
-
-        private void PrintGrid(string title, Func<NavChunk, int> valueSelector)
-        {
-            Console.WriteLine(title);
-            PrintHeader();
-
-            for (int x = 0; x < _map.Width; x++)
+            int guard = _map.Width * _map.Length + 8;
+            while (!current.Equals(_startPoint) && guard-- > 0)
             {
-                Console.Write($"[{x,DebugColumnWidth}]");
-                for (int y = 0; y < _map.Length; y++)
-                {
-                    Console.Write($"[{valueSelector(_mapChunks[x, y]),DebugColumnWidth}]");
-                }
-                Console.WriteLine();
+                Vector2Int? parent = _cameFrom[current.X, current.Y];
+                if (parent == null)
+                    break;
+                current = parent.Value;
+                stack.Push(current);
             }
-            Console.WriteLine();
+
+            while (stack.Count > 0)
+                _route.Add(stack.Pop());
         }
 
-        private void PrintHeader()
-        {
-            Console.Write($"[{"x",DebugColumnWidth}]");
-            for (int y = 0; y < _map.Length; y++)
-            {
-                Console.Write($"[{y,DebugColumnWidth}]");
-            }
-            Console.WriteLine();
-        }
+        private bool IsStartCell(int x, int y) => x == _startPoint.X && y == _startPoint.Y;
 
-        private void PrintRoute()
+        private bool CanEnter(int x, int y, bool ignoreParkedUnits)
         {
-            var routeSet = new HashSet<Vector2Int>(_route);
-            for (int x = 0; x < _map.Width; x++)
+            if (IsStartCell(x, y))
+                return true;
+
+            ChunkBase chunk = _tiles![x, y];
+            if (chunk == null || chunk.Height != 1 || chunk.Id == 0)
+                return false;
+
+            if (_constructionBlocked != null && _constructionBlocked[x, y])
+                return false;
+
+            if (ignoreParkedUnits)
+                return true;
+
+            List<Unit>? units = chunk.UnitsInPoint;
+            if (units == null || units.Count == 0)
+                return true;
+
+            for (int i = 0; i < units.Count; i++)
             {
-                for (int y = 0; y < _map.Length; y++)
-                {
-                    var marker = routeSet.Contains(_mapChunks[x, y].Position) ? "X" : " ";
-                    Console.Write($"[{marker}]");
-                }
-                Console.WriteLine();
+                Unit? unit = units[i];
+                if (unit == null || unit.IsDestroyed)
+                    continue;
+                if (_self != null && ReferenceEquals(unit, _self))
+                    continue;
+                if (!unit.OccupiesGroundCell)
+                    continue;
+                if (!unit.IsParked)
+                    continue;
+                return false;
             }
-            Console.WriteLine();
+
+            return true;
         }
     }
 }

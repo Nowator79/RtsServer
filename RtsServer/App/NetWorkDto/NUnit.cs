@@ -1,4 +1,4 @@
-﻿using RtsServer.App.Battle.Dto;
+using RtsServer.App.Battle.Dto;
 
 namespace RtsServer.App.NetWorkDto
 {
@@ -7,6 +7,9 @@ namespace RtsServer.App.NetWorkDto
         public int Id { get; set; }
         public string Code { get; set; }
         public float Health { get; set; }
+        public float MaxHealth { get; set; }
+        /// <summary>Высота над картой (самолёты). 0 = наземный юнит.</summary>
+        public float Height { get; set; }
         public Vector2Float Position { get; set; }
         public double Rotation { get; set; }
         public NAttackPoint[] AttackPoints { get; set; }
@@ -18,6 +21,8 @@ namespace RtsServer.App.NetWorkDto
             this.Id = Id;
             this.Code = Code;
             this.Health = Health;
+            this.MaxHealth = Health;
+            this.Height = 0f;
             this.Position = Position;
             this.Rotation = Rotation;
             this.OwnerId = OwnerId;

@@ -16,6 +16,7 @@ namespace RtsServer.App.NetWork.Tcp
         private readonly ILogger<UserClientTcp> _logger;
         private readonly INetWorkServer _server;
         private readonly CancellationTokenSource _cts = new();
+        private readonly SemaphoreSlim _writeLock = new(1, 1);
         private bool _disposed;
 
         public string Id { get; }
@@ -118,10 +119,14 @@ namespace RtsServer.App.NetWork.Tcp
             {
                 string json = JsonSerializer.Serialize(response) + "\n";
                 byte[] bytes = Encoding.UTF8.GetBytes(json);
-                await Stream.WriteAsync(bytes, 0, bytes.Length, cancellationToken).ConfigureAwait(false);
-                CountWrite++;
+                await WriteBytesAsync(bytes, cancellationToken).ConfigureAwait(false);
                 if (ConfigGameServer.IsDebugNetWork)
                     _logger.LogDebug("Отправлено {ClientId}: {Data}", Id, json.Trim());
+            }
+            catch (OperationCanceledException)
+            {
+                // Нормально при закрытии матча: _cts отменён, пока ещё шла запись.
+                _logger.LogDebug("Клиент {ClientId}: запись отменена (Action: {Action})", Id, response.Action);
             }
             catch (ObjectDisposedException)
             {
@@ -135,6 +140,34 @@ namespace RtsServer.App.NetWork.Tcp
             {
                 _logger.LogError(ex, "Клиент {ClientId}: неожиданная ошибка при записи (Action: {Action})", Id, response.Action);
                 throw;
+            }
+        }
+
+        /// <summary>
+        /// Пишет уже сериализованный кадр. Один буфер можно слать нескольким клиентам.
+        /// Записи сериализуются через _writeLock — без гонок и без параллельного забивания TCP.
+        /// </summary>
+        public async Task WriteBytesAsync(byte[] bytes, CancellationToken cancellationToken)
+        {
+            if (bytes == null)
+                throw new ArgumentNullException(nameof(bytes));
+            if (_disposed || Stream == null)
+            {
+                _logger.LogWarning("Клиент {ClientId}: запись пропущена — соединение закрыто", Id);
+                return;
+            }
+
+            await _writeLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                if (_disposed || Stream == null)
+                    return;
+                await Stream.WriteAsync(bytes, 0, bytes.Length, cancellationToken).ConfigureAwait(false);
+                CountWrite++;
+            }
+            finally
+            {
+                _writeLock.Release();
             }
         }
 
@@ -161,6 +194,7 @@ namespace RtsServer.App.NetWork.Tcp
             }
             finally
             {
+                _writeLock.Dispose();
                 _cts.Dispose();
                 _logger.LogInformation("Клиент {ClientId}: ресурсы освобождены", Id);
             }
