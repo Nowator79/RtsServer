@@ -85,15 +85,29 @@ namespace RtsServer.App.Battle
 
         private void InitMatchTypes(string[] availableMapCodes)
         {
-            string[] demoPool = availableMapCodes
-                .Where(c => c is "demo4" or "demo_mountain")
+            // Только карта с террасами высот 1/2/3.
+            string[] heightMapPool = availableMapCodes
+                .Where(c => c == "demo_mountain")
                 .ToArray();
-            if (demoPool.Length == 0)
-                demoPool = availableMapCodes;
+            if (heightMapPool.Length == 0)
+            {
+                _logger.LogWarning("Карта demo_mountain не найдена в MapScene — матчи без карт.");
+                heightMapPool = [];
+            }
 
-            MatchTypes["1v1"] = new MatchType("1v1", 2, availableMapCodes, preferredMapCode: "islands");
-            MatchTypes["demo"] = new MatchType("demo", 1, demoPool, preferredMapCodes: demoPool);
-            MatchTypes["ffa4"] = new MatchType("ffa4", 4, demoPool, preferredMapCodes: demoPool);
+            string[] ffa4Pool = availableMapCodes
+                .Where(c => c == "4ffa")
+                .ToArray();
+            if (ffa4Pool.Length == 0)
+            {
+                _logger.LogWarning("Карта 4ffa не найдена в MapScene — ffa4 без карт.");
+                ffa4Pool = [];
+            }
+
+            MatchTypes["1v1"] = new MatchType("1v1", 2, heightMapPool, preferredMapCode: "demo_mountain");
+            MatchTypes["demo"] = new MatchType("demo", 1, heightMapPool, preferredMapCodes: heightMapPool);
+            // Один игрок + 3 бота на карте 4ffa (4 штаба).
+            MatchTypes["ffa4"] = new MatchType("ffa4", 1, ffa4Pool, preferredMapCode: "4ffa");
         }
 
         public void AddUserToQueue(Queue queueData)
@@ -145,8 +159,8 @@ namespace RtsServer.App.Battle
             foreach (var user in players)
                 game.Players.Add(new Player(user, id++, game));
 
-            // Demo: один человек + 3 бота (карта demo4 — 4 штаба).
-            if (matchCode == "demo" && game.Players.Count == 1)
+            // Demo / 4ffa: один человек + 3 бота (4 штаба на сцене).
+            if ((matchCode == "demo" || matchCode == "ffa4") && game.Players.Count == 1)
             {
                 while (game.Players.Count < 4)
                 {

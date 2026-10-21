@@ -16,7 +16,7 @@ namespace RtsServer.App.Adapters
             for (int i = 0; i < unit.AttackingPoints.Length; i++)
             {
                 Battle.Units.AttackingPoint.BaseAttackingPoint attackPoint = unit.AttackingPoints[i];
-                unitRes.AttackPoints[i] = new NAttackPoint(attackPoint.Rotation);
+                unitRes.AttackPoints[i] = new NAttackPoint(attackPoint.Rotation, attackPoint.ShotSerial);
             }
             return unitRes;
         }

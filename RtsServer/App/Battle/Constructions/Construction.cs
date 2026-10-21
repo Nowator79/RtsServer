@@ -1,5 +1,6 @@
 ﻿using RtsServer.App.Battle.Dto;
 using RtsServer.App.Battle.Interfaces;
+using RtsServer.App.Battle.MapBattle;
 
 namespace RtsServer.App.Battle.Constructions
 {
@@ -23,7 +24,9 @@ namespace RtsServer.App.Battle.Constructions
             Position.X + Size.X * 0.5f,
             Position.Y + Size.Y * 0.5f);
 
-        public virtual double GetBodyHeight() => 1.2;
+        public virtual double GetGroundElevation() => TerrainHeights.SampleAt(Game, AimPosition);
+
+        public virtual double GetBodyHeight() => GetGroundElevation() + 1.2;
 
         public AttackTargetDomain AttackDomain => AttackTargetDomain.Construction;
         /// <summary>Здания по умолчанию тяжёлые — пулемёты слабо, танки/AGM сильно.</summary>

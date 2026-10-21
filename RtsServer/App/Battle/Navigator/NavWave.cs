@@ -25,6 +25,7 @@ namespace RtsServer.App.Battle.Navigator
         private readonly Vector2Int _endPoint;
         private readonly Unit? _self;
         private readonly Func<Vector2Int, int>? _extraCost;
+        private readonly bool _ignoreParked;
 
         private readonly List<Vector2Int> _route = new();
         private Vector2Int?[,] _cameFrom = null!;
@@ -42,13 +43,15 @@ namespace RtsServer.App.Battle.Navigator
             Vector2Int startPoint,
             Vector2Int endPoint,
             Unit? self = null,
-            Func<Vector2Int, int>? extraCost = null)
+            Func<Vector2Int, int>? extraCost = null,
+            bool ignoreParkedUnits = false)
         {
             _map = map ?? throw new ArgumentNullException(nameof(map));
             _startPoint = startPoint;
             _endPoint = endPoint;
             _self = self;
             _extraCost = extraCost;
+            _ignoreParked = ignoreParkedUnits;
         }
 
         public void Run()
@@ -57,7 +60,8 @@ namespace RtsServer.App.Battle.Navigator
             BuildConstructionBlocked();
 
             // Финиш должен быть проходимой землёй (стоячие чужие юниты — как раньше — блок).
-            if (!CanEnter(_endPoint.X, _endPoint.Y, ignoreParkedUnits: false)
+            // Шаг по высоте проверяется только между соседними клетками в A*.
+            if (!CanEnter(_endPoint.X, _endPoint.Y, _endPoint.X, _endPoint.Y, ignoreParkedUnits: _ignoreParked)
                 && !IsStartCell(_endPoint.X, _endPoint.Y))
             {
                 IsFail = true;
@@ -103,7 +107,9 @@ namespace RtsServer.App.Battle.Navigator
 
         private void MarkConstructions(IEnumerable<Construction> list, int w, int h)
         {
-            foreach (Construction c in list)
+            // Снимок: список построек может меняться из другого потока во время A*.
+            Construction[] snapshot = list is Construction[] arr ? arr : list.ToArray();
+            foreach (Construction c in snapshot)
             {
                 if (c == null || c.IsDestroyed)
                     continue;
@@ -168,11 +174,11 @@ namespace RtsServer.App.Battle.Navigator
 
                     bool diagonal = NeighborDx[i] != 0 && NeighborDy[i] != 0;
                     if (diagonal
-                        && (!CanEnter(nx, point.Y, ignoreParkedUnits: false)
-                            || !CanEnter(point.X, ny, ignoreParkedUnits: false)))
+                        && (!CanEnter(point.X, point.Y, nx, point.Y, ignoreParkedUnits: _ignoreParked)
+                            || !CanEnter(point.X, point.Y, point.X, ny, ignoreParkedUnits: _ignoreParked)))
                         continue;
 
-                    if (!CanEnter(nx, ny, ignoreParkedUnits: false))
+                    if (!CanEnter(point.X, point.Y, nx, ny, ignoreParkedUnits: _ignoreParked))
                         continue;
 
                     int stepCost = (diagonal ? DiagonalStepCost : CardinalStepCost) + GetExtraCost(nx, ny);
@@ -234,39 +240,24 @@ namespace RtsServer.App.Battle.Navigator
 
         private bool IsStartCell(int x, int y) => x == _startPoint.X && y == _startPoint.Y;
 
-        private bool CanEnter(int x, int y, bool ignoreParkedUnits)
+        private bool CanEnter(int fromX, int fromY, int x, int y, bool ignoreParkedUnits)
         {
             if (IsStartCell(x, y))
                 return true;
 
             ChunkBase chunk = _tiles![x, y];
-            if (chunk == null || chunk.Height != 1 || chunk.Id == 0)
+            if (!NavHelper.IsWalkableHeight(chunk))
+                return false;
+
+            ChunkBase from = _tiles![fromX, fromY];
+            if (from != null && !NavHelper.CanStepHeight(from.Height, chunk.Height))
                 return false;
 
             if (_constructionBlocked != null && _constructionBlocked[x, y])
                 return false;
 
-            if (ignoreParkedUnits)
-                return true;
-
-            List<Unit>? units = chunk.UnitsInPoint;
-            if (units == null || units.Count == 0)
-                return true;
-
-            for (int i = 0; i < units.Count; i++)
-            {
-                Unit? unit = units[i];
-                if (unit == null || unit.IsDestroyed)
-                    continue;
-                if (_self != null && ReferenceEquals(unit, _self))
-                    continue;
-                if (!unit.OccupiesGroundCell)
-                    continue;
-                if (!unit.IsParked)
-                    continue;
-                return false;
-            }
-
+            // Тела юнитов не стены навмеша: их разводит круглый толчок.
+            _ = ignoreParkedUnits;
             return true;
         }
     }

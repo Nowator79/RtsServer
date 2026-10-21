@@ -12,6 +12,8 @@ namespace RtsServer.App.Battle.Units.AttackingPoint
         public double Rotation { get; protected set; } = rotation;
         public Vector2Float? TargetPoint { get; protected set; }
         public IAttackTarget? Target { get; protected set; }
+        /// <summary>Растёт на каждый выстрел этой башни. Клиент по нему играет отдачу.</summary>
+        public int ShotSerial { get; private set; }
         public float Damage { get; protected set; }
         public double SpeedRotation { get; protected set; }
         public float Range { get; protected set; }
@@ -21,7 +23,7 @@ namespace RtsServer.App.Battle.Units.AttackingPoint
         public ArmorDamageProfile ArmorDamage { get; protected set; } = ArmorDamageProfile.Zero;
         protected TypeTarget TypeTargetUnit { get; set; } = TypeTarget.Empty;
 
-        protected const int KRotationSpeed = 1;
+        protected const int KRotationSpeed = 2;
 
         protected double fireCooldown = 1.0;
         protected double _lastShotTime = 0;
@@ -57,7 +59,7 @@ namespace RtsServer.App.Battle.Units.AttackingPoint
                 TypeTargetUnit = TypeTarget.Empty;
             }
 
-            if (Target != null && Target.IsDestroyed)
+            if (Target != null && (Target.IsDestroyed || !OwnerCanSee(Target.AimPosition)))
             {
                 LoseTarget();
             }
@@ -99,10 +101,25 @@ namespace RtsServer.App.Battle.Units.AttackingPoint
             double? targetHeightOverride = null,
             bool guided = false,
             bool flatTrajectory = false,
-            bool preferLowArc = true)
+            bool preferLowArc = true,
+            double loftDurationSeconds = 0,
+            double? homingDurationSeconds = null,
+            bool sharpDivertAfterLoft = false,
+            bool ignoreCooldown = false,
+            string? overrideMissileCode = null)
         {
+            if (Target != null)
+            {
+                if (!OwnerCanSee(Target.AimPosition))
+                    return false;
+            }
+            else if (!OwnerCanSee(targetPosition))
+            {
+                return false;
+            }
+
             double now = CurrentUnit.Game.TimeSystem.GetTime();
-            if (now - _lastShotTime < fireCooldown)
+            if (!ignoreCooldown && now - _lastShotTime < fireCooldown)
                 return false;
 
             double fromHeight = CurrentUnit.GetMuzzleHeight();
@@ -110,9 +127,9 @@ namespace RtsServer.App.Battle.Units.AttackingPoint
                 ?? (Target != null ? Target.GetBodyHeight() : 0.5);
 
             Vector3Float velocity;
-            if (guided || flatTrajectory)
+            if (loftDurationSeconds > 0 || guided || flatTrajectory)
             {
-                // Прямой выстрел без баллистической дуги (трассеры / самонаведение).
+                // Для loft передаём направление на цель — Missile сделает подъём с лёгким наклоном.
                 Vector3Float toTarget = new(
                     targetPosition.X - CurrentUnit.Position.X,
                     targetPosition.Y - CurrentUnit.Position.Y,
@@ -121,7 +138,7 @@ namespace RtsServer.App.Battle.Units.AttackingPoint
                 if (mag < 1e-6)
                 {
                     Vector2Float fwd = Vector2Float.VectorByAngle(-CurrentUnit.Rotation).Normalize();
-                    velocity = new Vector3Float(fwd.X * missileSpeed, fwd.Y * missileSpeed, flatTrajectory ? 0 : -0.5);
+                    velocity = new Vector3Float(fwd.X * missileSpeed, fwd.Y * missileSpeed, flatTrajectory ? 0 : missileSpeed);
                 }
                 else
                 {
@@ -142,7 +159,7 @@ namespace RtsServer.App.Battle.Units.AttackingPoint
             }
 
             Missile missile = new(
-                missileCode,
+                overrideMissileCode ?? missileCode,
                 CurrentUnit.Position,
                 fromHeight,
                 velocity,
@@ -155,13 +172,17 @@ namespace RtsServer.App.Battle.Units.AttackingPoint
                 this,
                 CurrentUnit.OwnerId,
                 CurrentUnit.Game,
-                lockTarget: Target,
+                lockTarget: guided ? Target : null,
                 guided: guided,
                 shooterUnitId: CurrentUnit.Id,
-                applyGravity: !flatTrajectory && !guided,
-                armorDamage: ArmorDamage);
+                applyGravity: !flatTrajectory && !guided && !sharpDivertAfterLoft,
+                armorDamage: ArmorDamage,
+                homingDurationSeconds: homingDurationSeconds,
+                loftDurationSeconds: loftDurationSeconds,
+                sharpDivertAfterLoft: sharpDivertAfterLoft);
 
             CurrentUnit.Game.AddMissile(missile);
+            ShotSerial++;
             _lastShotTime = now;
             return true;
         }
@@ -170,8 +191,8 @@ namespace RtsServer.App.Battle.Units.AttackingPoint
         {
             if (Target != null)
             {
-                // Цель стала недопустимой (смена правил / тип) — сбросить.
-                if (!CanEngage(Target))
+                // Цель стала недопустимой или ушла из зрения — сбросить.
+                if (!CanEngage(Target) || !OwnerCanSee(Target.AimPosition))
                     ClearTarget();
                 else
                     return;
@@ -185,7 +206,7 @@ namespace RtsServer.App.Battle.Units.AttackingPoint
             {
                 if (unit == CurrentUnit) continue;
                 if (unit.OwnerId == CurrentUnit.OwnerId) continue;
-                if (!CanEngage(unit)) continue;
+                if (!CanEngage(unit) || !OwnerCanSee(unit.AimPosition)) continue;
                 double dist = Vector2Float.Distance(CurrentUnit.Position, unit.AimPosition);
                 if (dist >= bestDist) continue;
                 bestDist = dist;
@@ -196,7 +217,7 @@ namespace RtsServer.App.Battle.Units.AttackingPoint
             {
                 if (construction.OwnerId == CurrentUnit.OwnerId) continue;
                 if (construction.IsDestroyed) continue;
-                if (!CanEngage(construction)) continue;
+                if (!CanEngage(construction) || !OwnerCanSee(construction.AimPosition)) continue;
                 double dist = Vector2Float.Distance(CurrentUnit.Position, construction.AimPosition);
                 if (dist >= bestDist) continue;
                 bestDist = dist;
@@ -216,7 +237,7 @@ namespace RtsServer.App.Battle.Units.AttackingPoint
 
         public virtual void SetTarget(IAttackTarget target)
         {
-            if (!CanEngage(target))
+            if (!CanEngage(target) || !OwnerCanSee(target.AimPosition))
                 return;
 
             TargetPoint = null;
@@ -285,6 +306,11 @@ namespace RtsServer.App.Battle.Units.AttackingPoint
             }
 
             Rotation += Math.Sign(angleDifference) * rotationStep;
+        }
+
+        private bool OwnerCanSee(Vector2Float position)
+        {
+            return CurrentUnit.Game != null && CurrentUnit.Game.CanSee(CurrentUnit.OwnerId, position);
         }
 
         private double NormalizeAngle(double angle)

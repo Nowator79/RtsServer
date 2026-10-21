@@ -57,7 +57,10 @@ namespace RtsServer.App.Battle.Navigator
             Vector2Int pathStart = Unit.GetPathStartCell();
             if (pathStart.Equals(destination))
             {
-                Unit.SetPathRoute(new Queue<Vector2Int>());
+                // Объезд пробки не должен стирать уже идущий маршрут.
+                if (!retargetDestination && Unit.HasActiveRoute)
+                    return;
+                ApplyRoute(new Queue<Vector2Int>());
                 return;
             }
 
@@ -70,21 +73,27 @@ namespace RtsServer.App.Battle.Navigator
 
             if (navWave.IsFail)
             {
-                Unit.SetPathRoute(new Queue<Vector2Int>());
+                if (!retargetDestination && Unit.HasActiveRoute)
+                    return;
+                ApplyRoute(new Queue<Vector2Int>());
                 return;
             }
 
             Queue<Vector2Int> route = navWave.GetRoutePath();
             List<Vector2Int> cells = GridPathUtil.EnsureAdjacent(route.ToList());
+            cells = PathSmoother.Smooth(cells, Map, Unit.Game);
             reservations?.AddPath(cells);
-            var cellQueue = new Queue<Vector2Int>(cells);
+            ApplyRoute(new Queue<Vector2Int>(cells));
+        }
 
-            Vector2Int? currentWaypoint = Unit.GetCurrentWaypoint();
+        /// <summary>Новый приказ заменяет маршрут целиком. Старую точку пути не доезжаем.</summary>
+        private void ApplyRoute(Queue<Vector2Int> route)
+        {
+            Vector2Int here = Unit.Position.ToInt();
+            while (route.Count > 0 && route.Peek().Equals(here))
+                route.Dequeue();
 
-            if (currentWaypoint.HasValue && cellQueue.Count > 0 && cellQueue.Peek() == currentWaypoint.Value)
-                Unit.SetPathRouteFromWaypoint(cellQueue);
-            else
-                Unit.SetPathRoute(cellQueue);
+            Unit.SetPathRoute(route);
         }
 
         private Vector2Int FindNearestFreeCell(Vector2Int desired)
@@ -122,7 +131,7 @@ namespace RtsServer.App.Battle.Navigator
         private bool IsWalkableTerrain(Vector2Int cell)
         {
             var chunk = Map.GetArrayMap()[cell.X, cell.Y];
-            if (chunk.Height != 1 || chunk.Id == 0)
+            if (!NavHelper.IsWalkableHeight(chunk))
                 return false;
             if (NavHelper.IsBlockedByConstruction(Unit?.Game, cell))
                 return false;
@@ -139,8 +148,9 @@ namespace RtsServer.App.Battle.Navigator
             {
                 if (other == null || other == Unit || other.IsDestroyed || !other.OccupiesGroundCell)
                     continue;
-                if (other.IsParked)
-                    return false;
+                if (!other.IsParked)
+                    continue;
+                return false;
             }
 
             return true;
@@ -156,6 +166,7 @@ namespace RtsServer.App.Battle.Navigator
             {
                 if (other == null || other == Unit || other.IsDestroyed || !other.OccupiesGroundCell)
                     continue;
+                // Финишный слот — только если клетка реально свободна.
                 return false;
             }
 

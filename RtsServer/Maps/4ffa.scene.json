@@ -1,0 +1,69 @@
+{
+  "MapCode": "4ffa",
+  "StartingResources": 1000,
+  "PlayerStarts": [
+    {
+      "PlayerOwnerNum": 0,
+      "CameraPosition": {
+        "X": 15,
+        "Y": 18
+      }
+    },
+    {
+      "PlayerOwnerNum": 1,
+      "CameraPosition": {
+        "X": 77,
+        "Y": 20
+      }
+    },
+    {
+      "PlayerOwnerNum": 2,
+      "CameraPosition": {
+        "X": 75,
+        "Y": 82
+      }
+    },
+    {
+      "PlayerOwnerNum": 3,
+      "CameraPosition": {
+        "X": 16,
+        "Y": 85
+      }
+    }
+  ],
+  "Constructions": [
+    {
+      "PlayerOwnerNum": 0,
+      "Code": "HeadquartersConstruction",
+      "Position": {
+        "X": 15,
+        "Y": 17
+      }
+    },
+    {
+      "PlayerOwnerNum": 1,
+      "Code": "HeadquartersConstruction",
+      "Position": {
+        "X": 77,
+        "Y": 19
+      }
+    },
+    {
+      "PlayerOwnerNum": 2,
+      "Code": "HeadquartersConstruction",
+      "Position": {
+        "X": 74,
+        "Y": 81
+      }
+    },
+    {
+      "PlayerOwnerNum": 3,
+      "Code": "HeadquartersConstruction",
+      "Position": {
+        "X": 17,
+        "Y": 83
+      }
+    }
+  ],
+  "Units": []
+}

@@ -23,11 +23,15 @@ namespace RtsServer.App.Battle.Constructions
 
         public string? CurrentProductionCode => _currentUnitCode;
         public IReadOnlyCollection<string> ProductionQueue => _queue;
+        public string ProductionQueueCsv => _queueCsv;
+        public int OrdersCount =>
+            (_currentUnitCode != null ? 1 : 0) + _queue.Count;
 
         private string? _currentUnitCode;
         private float _productionProgress;
         private float _productionDuration = 1f;
         private readonly Queue<string> _queue = new();
+        private string _queueCsv = "";
 
         public AirFactoryConstruction(Vector2Int position, int playerOwner)
             : base(maxHealth, maxHealth, position, new(sizeX, sizeY), Code, playerOwner) { }
@@ -55,6 +59,7 @@ namespace RtsServer.App.Battle.Constructions
         public bool Enqueue(string unitCode, float buildSeconds)
         {
             if (!IsBuilt || !CanProduce(unitCode)) return false;
+            if (OrdersCount >= UnitProductionLimits.MaxOrders) return false;
 
             if (_currentUnitCode == null)
             {
@@ -65,9 +70,15 @@ namespace RtsServer.App.Battle.Constructions
             else
             {
                 _queue.Enqueue(unitCode);
+                RebuildQueueCsv();
             }
 
             return true;
+        }
+
+        private void RebuildQueueCsv()
+        {
+            _queueCsv = _queue.Count == 0 ? "" : string.Join(",", _queue);
         }
 
         public override void Update()
@@ -87,6 +98,7 @@ namespace RtsServer.App.Battle.Constructions
             if (_queue.Count == 0) return;
 
             string next = _queue.Dequeue();
+            RebuildQueueCsv();
             if (!TryGetUnitRecipe(next, out _, out float seconds))
                 return;
 

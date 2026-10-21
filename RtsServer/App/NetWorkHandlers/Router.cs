@@ -82,6 +82,7 @@ namespace RtsServer.App.NetWorkHandlers
         private void RegisterMainHandlers()
         {
             AddProcessor("/main/askMapByCode/", new AskMapByCodeProcessor());
+            AddProcessor("/lab/catalog/", new LabCatalogProcessor());
         }
 
         private void RegisterBattleHandlers()

@@ -481,6 +481,12 @@ namespace RtsServer.App.Battle.Units
                 }
             }
 
+            if (fromPoints != null && !Game.CanSee(OwnerId, fromPoints.AimPosition))
+            {
+                ClearAttackRun(clearWeaponTargets: true);
+                fromPoints = null;
+            }
+
             if (fromPoints != null && !IsAttackMoving)
             {
                 if (_attackTarget != fromPoints)
@@ -492,7 +498,7 @@ namespace RtsServer.App.Battle.Units
                 return;
             }
 
-            if (_attackTarget != null && _attackTarget.IsDestroyed)
+            if (_attackTarget != null && (_attackTarget.IsDestroyed || !Game.CanSee(OwnerId, _attackTarget.AimPosition)))
                 ClearAttackRun(clearWeaponTargets: true);
 
             // Attack-move: постоянно ищем ближайшую цель (даже если уже есть дальняя).
@@ -585,6 +591,7 @@ namespace RtsServer.App.Battle.Units
             {
                 if (other == null || other == this || other.IsDestroyed) continue;
                 if (other.OwnerId == OwnerId) continue;
+                if (!Game.CanSee(OwnerId, other.AimPosition)) continue;
                 if (!CanAnyTurretEngage(other)) continue;
                 double dist = Vector2Float.Distance(Position, other.AimPosition);
                 if (dist >= bestDist) continue;
@@ -596,6 +603,7 @@ namespace RtsServer.App.Battle.Units
             {
                 if (construction == null || construction.IsDestroyed) continue;
                 if (construction.OwnerId == OwnerId) continue;
+                if (!Game.CanSee(OwnerId, construction.AimPosition)) continue;
                 if (!CanAnyTurretEngage(construction)) continue;
                 double dist = Vector2Float.Distance(Position, construction.AimPosition);
                 if (dist >= bestDist) continue;

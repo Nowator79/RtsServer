@@ -1,6 +1,7 @@
 using RtsServer.App.Battle.Constructions;
 using RtsServer.App.Battle.Dto;
 using RtsServer.App.Battle.Explosion;
+using RtsServer.App.Battle.MapBattle;
 using RtsServer.App.Battle.Interfaces;
 using RtsServer.App.Battle.Tools;
 using RtsServer.App.Battle.Units.AttackingPoint;
@@ -49,10 +50,16 @@ namespace RtsServer.App.Battle.Units
         /// <summary>Быстрые трассеры (mg) — чуть шире радиус, иначе проскакивают за тик.</summary>
         private const double HitRadiusFastTracer = 1.45;
 
-        /// <summary>Сколько секунд ракета держит лок и летит под тягой.</summary>
-        private const double HomingDurationSeconds = 2.0;
+        /// <summary>Сколько секунд ракета держит лок и летит под тягой (по умолчанию).</summary>
+        private const double DefaultHomingDurationSeconds = 2.0;
         /// <summary>Макс. угловая скорость доворота (град/с) — может не успеть изогнуться.</summary>
         private const double MaxTurnRateDegreesPerSec = 85.0;
+
+        private readonly double _homingDurationSeconds;
+        private readonly double _loftDurationSeconds;
+        /// <summary>Рой ракет: чуть вверх → низкая дуга → удар в землю (без лока).</summary>
+        private readonly bool _vlsBallistic;
+        private Vector3Float? _vlsArcVelocity;
 
         public void SetId(int id) => Id = id;
 
@@ -74,13 +81,15 @@ namespace RtsServer.App.Battle.Units
             bool guided = false,
             int? shooterUnitId = null,
             bool applyGravity = true,
-            ArmorDamageProfile? armorDamage = null)
+            ArmorDamageProfile? armorDamage = null,
+            double? homingDurationSeconds = null,
+            double loftDurationSeconds = 0,
+            bool sharpDivertAfterLoft = false)
             : base(code, playerOwner, startMap)
         {
             Code = code;
             Position = startMap;
             Height = startHeight;
-            Velocity = velocity;
             TargetMap = targetMap;
             TargetHeight = targetHeight;
             Speed = speed;
@@ -89,14 +98,64 @@ namespace RtsServer.App.Battle.Units
             CurrentAttackPoint = currentAttackPoint;
             Range = range;
             Damage = damage;
-            _lockTarget = lockTarget;
-            _isGuided = guided || code is "agm_rocket" or "aam_rocket";
+            _vlsBallistic = sharpDivertAfterLoft && loftDurationSeconds > 0;
+            // VLS без наводки — лок не держим.
+            _lockTarget = _vlsBallistic ? null : lockTarget;
+            _isGuided = !_vlsBallistic && (guided || code is "agm_rocket" or "aam_rocket");
             _game = game ?? throw new ArgumentNullException(nameof(game));
             _shooterUnitId = shooterUnitId;
-            _applyGravity = applyGravity && !_isGuided;
+            _applyGravity = applyGravity && !_isGuided && !_vlsBallistic;
             _armorDamage = armorDamage ?? ArmorDamageProfile.Zero;
+            _homingDurationSeconds = homingDurationSeconds is > 0
+                ? homingDurationSeconds.Value
+                : DefaultHomingDurationSeconds;
+            _loftDurationSeconds = loftDurationSeconds > 0 ? loftDurationSeconds : 0;
+            // Рой: старт чуть вверх с наклоном к точке удара (не отвесная ракета).
+            Velocity = _vlsBallistic
+                ? BuildRocketSwarmLoftVelocity(targetMap, startMap, speed)
+                : (_loftDurationSeconds > 0 ? BuildLoftVelocity(velocity, speed) : velocity);
             _prevPosition = startMap;
             _prevHeight = startHeight;
+        }
+
+        /// <summary>Старт роя: в основном к цели, чуть вверх.</summary>
+        private static Vector3Float BuildRocketSwarmLoftVelocity(
+            Vector2Float targetMap,
+            Vector2Float startMap,
+            float speed)
+        {
+            double dx = targetMap.X - startMap.X;
+            double dy = targetMap.Y - startMap.Y;
+            double hMag = Math.Sqrt(dx * dx + dy * dy);
+            if (hMag < 1e-6)
+                return new Vector3Float(0, 0, speed * 0.55);
+
+            double inv = 1.0 / hMag;
+            // Низкий старт: сильный горизонтальный компонент + небольшой подъём.
+            return new Vector3Float(
+                dx * inv * speed * 0.72,
+                dy * inv * speed * 0.72,
+                speed * 0.55);
+        }
+
+        /// <summary>Старт: в основном вверх, лёгкий наклон к начальному направлению на цель.</summary>
+        private static Vector3Float BuildLoftVelocity(Vector3Float aimVelocity, float speed)
+        {
+            double hx = aimVelocity.X;
+            double hy = aimVelocity.Y;
+            double hMag = Math.Sqrt(hx * hx + hy * hy);
+            if (hMag > 1e-6)
+            {
+                hx = hx / hMag * speed * 0.22;
+                hy = hy / hMag * speed * 0.22;
+            }
+            else
+            {
+                hx = 0;
+                hy = 0;
+            }
+
+            return new Vector3Float(hx, hy, speed);
         }
 
         public void Update()
@@ -112,15 +171,18 @@ namespace RtsServer.App.Battle.Units
             _prevPosition = Position;
             _prevHeight = Height;
 
-            if (_isGuided)
+            if (_vlsBallistic)
+                UpdateVlsBallistic(deltaTime);
+            else if (_isGuided)
                 UpdateGuided(deltaTime);
             else
                 UpdateBallistic(deltaTime);
 
-            if (TryHitTarget() || HasHitGround())
+            bool hitBody = TryHitTarget();
+            if (hitBody || HasHitGround())
             {
-                if (Height < GroundLevel)
-                    Height = GroundLevel;
+                if (!hitBody)
+                    LiftOntoTile();
                 Destroy();
             }
         }
@@ -140,7 +202,16 @@ namespace RtsServer.App.Battle.Units
 
         private void UpdateGuided(float deltaTime)
         {
-            bool powered = _age < HomingDurationSeconds;
+            if (_loftDurationSeconds > 0 && _age < _loftDurationSeconds)
+            {
+                double mag = Velocity.Magnitude();
+                if (mag > 1e-6)
+                    Velocity = Velocity * (Speed / mag);
+                Integrate(deltaTime);
+                return;
+            }
+
+            bool powered = _age < _loftDurationSeconds + _homingDurationSeconds;
             IAttackTarget? live = ResolveLockTarget();
 
             if (powered && live != null)
@@ -148,7 +219,6 @@ namespace RtsServer.App.Battle.Units
                 Vector3Float desired = DesiredVelocityToward(live);
                 Velocity = SteerVelocity(Velocity, desired, MaxTurnRateDegreesPerSec * deltaTime);
 
-                // Под тягой держим скорость примерно постоянной.
                 double mag = Velocity.Magnitude();
                 if (mag > 1e-6)
                     Velocity = Velocity * (Speed / mag);
@@ -157,7 +227,6 @@ namespace RtsServer.App.Battle.Units
             }
             else
             {
-                // Топливо кончилось — лок теряется, падаем по текущей скорости + гравитация.
                 Velocity = new Vector3Float(
                     Velocity.X,
                     Velocity.Y,
@@ -167,8 +236,64 @@ namespace RtsServer.App.Battle.Units
             Integrate(deltaTime);
         }
 
+        /// <summary>
+        /// Рой ракет: короткий подъём → низкая баллистическая дуга точно в точку удара → взрыв.
+        /// Без самонаведения; точка задана при выстреле (с разбросом).
+        /// </summary>
+        private void UpdateVlsBallistic(float deltaTime)
+        {
+            // Короткая фаза «поднялись».
+            if (_age < _loftDurationSeconds)
+            {
+                Integrate(deltaTime);
+                return;
+            }
+
+            // Низкая дуга в фиксированную точку — без перелётов на близкой дистанции.
+            if (_vlsArcVelocity == null)
+            {
+                double muzzle = Math.Max(Speed, 8f);
+                if (!Ballistics.TryComputeLaunchVelocity(
+                        Position,
+                        Height,
+                        TargetMap,
+                        TargetHeight,
+                        muzzle,
+                        out Vector3Float arcVel,
+                        preferLowArc: true))
+                {
+                    arcVel = DesiredVelocityTowardFixedAim();
+                }
+
+                _vlsArcVelocity = arcVel;
+                Velocity = arcVel;
+            }
+
+            Velocity = new Vector3Float(
+                Velocity.X,
+                Velocity.Y,
+                Velocity.Z - Ballistics.Gravity * deltaTime);
+            Integrate(deltaTime);
+        }
+
+        private Vector3Float DesiredVelocityTowardFixedAim()
+        {
+            Vector3Float toAim = new(
+                TargetMap.X - Position.X,
+                TargetMap.Y - Position.Y,
+                TargetHeight - Height);
+
+            double mag = toAim.Magnitude();
+            if (mag < 1e-6)
+                return Velocity.Magnitude() > 1e-6 ? Velocity.Normalized() * Speed : new Vector3Float(0, 0, -Speed);
+
+            return toAim.Normalized() * Speed;
+        }
+
         private IAttackTarget? ResolveLockTarget()
         {
+            if (_vlsBallistic)
+                return null;
             if (_lockTarget != null && !_lockTarget.IsDestroyed)
                 return _lockTarget;
             IAttackTarget? fromGun = CurrentAttackPoint?.Target;
@@ -238,6 +363,10 @@ namespace RtsServer.App.Battle.Units
 
         private bool TryHitTarget()
         {
+            // VLS-артиллерия бьёт по земле (взрыв по касанию), без лока на юнит.
+            if (_vlsBallistic)
+                return false;
+
             double hitRadius = Code == "mg_tracer" ? HitRadiusFastTracer : HitRadiusUnit;
 
             IAttackTarget? target = ResolveLockTarget();
@@ -334,9 +463,23 @@ namespace RtsServer.App.Battle.Units
             return Height <= bodyH + 0.85 && Height >= -0.2;
         }
 
+        /// <summary>Поверхность тайла под снарядом. Плоская земля остаётся на GroundLevel.</summary>
+        private double SurfaceAt(Vector2Float map)
+        {
+            return TerrainHeights.SampleAt(_game, map) + GroundLevel;
+        }
+
+        /// <summary>Взрыв не должен оставаться ниже рельефа.</summary>
+        private void LiftOntoTile()
+        {
+            double surface = SurfaceAt(Position);
+            if (Height < surface)
+                Height = surface;
+        }
+
         private bool HasHitGround()
         {
-            return Height <= GroundLevel && Velocity.Z <= 0;
+            return Velocity.Z <= 0 && Height <= SurfaceAt(Position);
         }
 
         public override void Destroy()

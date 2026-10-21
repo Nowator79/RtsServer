@@ -5,16 +5,42 @@ VisualStudioVersion = 17.3.32929.385
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RtsServer", "RtsServer\RtsServer.csproj", "{A94362E1-32E1-4176-B860-1CE1DAB1D6C8}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MapEditor", "..\Tools\MapEditor\MapEditor.csproj", "{D944A322-D060-487B-84F5-05DEC25BAF40}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
+		Debug|x64 = Debug|x64
+		Debug|x86 = Debug|x86
 		Release|Any CPU = Release|Any CPU
+		Release|x64 = Release|x64
+		Release|x86 = Release|x86
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
 		{A94362E1-32E1-4176-B860-1CE1DAB1D6C8}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{A94362E1-32E1-4176-B860-1CE1DAB1D6C8}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A94362E1-32E1-4176-B860-1CE1DAB1D6C8}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{A94362E1-32E1-4176-B860-1CE1DAB1D6C8}.Debug|x64.Build.0 = Debug|Any CPU
+		{A94362E1-32E1-4176-B860-1CE1DAB1D6C8}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{A94362E1-32E1-4176-B860-1CE1DAB1D6C8}.Debug|x86.Build.0 = Debug|Any CPU
 		{A94362E1-32E1-4176-B860-1CE1DAB1D6C8}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{A94362E1-32E1-4176-B860-1CE1DAB1D6C8}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A94362E1-32E1-4176-B860-1CE1DAB1D6C8}.Release|x64.ActiveCfg = Release|Any CPU
+		{A94362E1-32E1-4176-B860-1CE1DAB1D6C8}.Release|x64.Build.0 = Release|Any CPU
+		{A94362E1-32E1-4176-B860-1CE1DAB1D6C8}.Release|x86.ActiveCfg = Release|Any CPU
+		{A94362E1-32E1-4176-B860-1CE1DAB1D6C8}.Release|x86.Build.0 = Release|Any CPU
+		{D944A322-D060-487B-84F5-05DEC25BAF40}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D944A322-D060-487B-84F5-05DEC25BAF40}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D944A322-D060-487B-84F5-05DEC25BAF40}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{D944A322-D060-487B-84F5-05DEC25BAF40}.Debug|x64.Build.0 = Debug|Any CPU
+		{D944A322-D060-487B-84F5-05DEC25BAF40}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{D944A322-D060-487B-84F5-05DEC25BAF40}.Debug|x86.Build.0 = Debug|Any CPU
+		{D944A322-D060-487B-84F5-05DEC25BAF40}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D944A322-D060-487B-84F5-05DEC25BAF40}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D944A322-D060-487B-84F5-05DEC25BAF40}.Release|x64.ActiveCfg = Release|Any CPU
+		{D944A322-D060-487B-84F5-05DEC25BAF40}.Release|x64.Build.0 = Release|Any CPU
+		{D944A322-D060-487B-84F5-05DEC25BAF40}.Release|x86.ActiveCfg = Release|Any CPU
+		{D944A322-D060-487B-84F5-05DEC25BAF40}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

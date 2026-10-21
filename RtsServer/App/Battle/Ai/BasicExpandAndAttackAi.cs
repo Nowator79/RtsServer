@@ -32,7 +32,7 @@ namespace RtsServer.App.Battle.Ai
         private const int TargetAntiAirTurrets = 3;
 
         private static readonly string[] InfantryPool = ["Soldier", "Grenadier"];
-        private static readonly string[] VehiclePool = ["Baggy", "TankT1", "TankAa"];
+        private static readonly string[] VehiclePool = ["Baggy", "TankT1", "TankAa", "TankArtillery"];
 
         private readonly Random _rng = new();
         private double _buildCd;
@@ -401,6 +401,8 @@ namespace RtsServer.App.Battle.Ai
             {
                 if (c.OwnerId == player.Id || c.IsDestroyed)
                     continue;
+                if (!game.CanSee(player.Id, c.AimPosition))
+                    continue;
                 double dist = Vector2Float.Distance(origin, c.AimPosition);
                 if (dist >= bestDist)
                     continue;
@@ -411,6 +413,8 @@ namespace RtsServer.App.Battle.Ai
             foreach (Unit u in game.Units)
             {
                 if (u.OwnerId == player.Id || u.IsDestroyed)
+                    continue;
+                if (!game.CanSee(player.Id, u.AimPosition))
                     continue;
                 double dist = Vector2Float.Distance(origin, u.AimPosition);
                 if (dist >= bestDist)

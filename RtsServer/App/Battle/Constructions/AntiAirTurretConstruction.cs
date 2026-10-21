@@ -34,7 +34,7 @@ namespace RtsServer.App.Battle.Constructions
         {
         }
 
-        public override double GetBodyHeight() => 2.2;
+        public override double GetBodyHeight() => GetGroundElevation() + 2.2;
 
         public override void Update()
         {
@@ -56,11 +56,12 @@ namespace RtsServer.App.Battle.Constructions
                 return;
 
             Vector2Float from = AimPosition;
+            double fromHeight = GetGroundElevation() + MuzzleHeight;
             double toHeight = target.GetBodyHeight();
             Vector3Float toTarget = new(
                 target.AimPosition.X - from.X,
                 target.AimPosition.Y - from.Y,
-                toHeight - MuzzleHeight);
+                toHeight - fromHeight);
 
             double mag = toTarget.Magnitude();
             Vector3Float velocity = mag > 1e-6
@@ -70,7 +71,7 @@ namespace RtsServer.App.Battle.Constructions
             Missile missile = new(
                 "aam_rocket",
                 from,
-                MuzzleHeight,
+                fromHeight,
                 velocity,
                 target.AimPosition,
                 toHeight,
@@ -100,6 +101,7 @@ namespace RtsServer.App.Battle.Constructions
                 if (unit == null || unit.IsDestroyed) continue;
                 if (unit.OwnerId == OwnerId) continue;
                 if (unit.AttackDomain != AttackTargetDomain.Air) continue;
+                if (!Game.CanSee(OwnerId, unit.AimPosition)) continue;
 
                 double dist = Vector2Float.Distance(AimPosition, unit.AimPosition);
                 if (dist >= bestDist) continue;

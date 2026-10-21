@@ -26,12 +26,28 @@ namespace RtsServer.App
         public const bool IsEnabledClearConsole = false;
 
         /// <summary>
-        /// true — использовать in-memory мок БД (без MySQL).
-        /// false — использовать реальную MySQL.
+        /// true — in-memory мок. false — MySQL (см. MySqlConnectionString).
+        /// Можно переопределить переменной окружения RTS_USE_MOCK_DB=1|0.
         /// </summary>
-        public const bool UseMockDatabase = true;
+        public static bool UseMockDatabase =>
+            GetEnvBool("RTS_USE_MOCK_DB", defaultValue: false);
+
+        /// <summary>
+        /// Строка подключения MySQL. Переопределение: RTS_MYSQL.
+        /// </summary>
+        public static string MySqlConnectionString =>
+            Environment.GetEnvironmentVariable("RTS_MYSQL")
+            ?? "server=localhost;user=root;password=root;database=rts_server;";
 
         // Запустить одиночный тестовый
         public const bool IsTestBattle = true;
+
+        private static bool GetEnvBool(string name, bool defaultValue)
+        {
+            string? raw = Environment.GetEnvironmentVariable(name);
+            if (string.IsNullOrWhiteSpace(raw))
+                return defaultValue;
+            return raw is "1" or "true" or "TRUE" or "yes" or "YES";
+        }
     }
 }

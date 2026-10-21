@@ -1,4 +1,4 @@
-﻿
+
 using RtsServer.App.DataBase.Dto;
 
 namespace RtsServer.App.DataBase.Db
@@ -15,10 +15,24 @@ namespace RtsServer.App.DataBase.Db
         public void Add(UserAuth user)
         {
             UserAuth? findUser = Users.Find(e => e.UserName == user.UserName);
-            if(findUser == null)
+            if (findUser == null)
             {
                 Users.Add(user);
+                return;
             }
+
+            findUser.AuthToken = user.AuthToken;
+            findUser.Credits = user.Credits;
+            findUser.TechCredits = user.TechCredits;
+            findUser.Experience = user.Experience;
+            findUser.Level = user.Level;
+        }
+
+        public UserAuth? GetByToken(string token)
+        {
+            if (string.IsNullOrWhiteSpace(token))
+                return null;
+            return Users.Find(e => e.AuthToken == token);
         }
         public UserAuth? GetByLogin(string login)
         {

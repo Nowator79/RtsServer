@@ -1,4 +1,4 @@
-﻿using RtsServer.App.Battle.Dto;
+using RtsServer.App.Battle.Dto;
 using RtsServer.App.Battle.Interfaces;
 
 namespace RtsServer.App.Battle.Units.AttackingPoint
@@ -9,10 +9,10 @@ namespace RtsServer.App.Battle.Units.AttackingPoint
         {
             SpeedRotation = 60;
             Range = 10;
-            fireCooldown = 5;
+            fireCooldown = 1.25;
             // По Docs/UnitAttackDomains.md: Ground | Construction.
             AllowedTargetDomains = AttackTargetDomain.Ground | AttackTargetDomain.Construction;
-            ArmorDamage = new ArmorDamageProfile(vsLight: 154f, vsMedium: 490f, vsHeavy: 735f);
+            ArmorDamage = new ArmorDamageProfile(vsLight: 77f, vsMedium: 245f, vsHeavy: 367.5f);
             Damage = ArmorDamage.VsHeavy;
         }
 

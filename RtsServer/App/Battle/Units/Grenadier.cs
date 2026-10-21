@@ -8,6 +8,7 @@ namespace RtsServer.App.Battle.Units
     public class Grenadier : Unit
     {
         public override ArmorType Armor => ArmorType.Light;
+        public override double CollisionRadius => 0.1;
 
         public Grenadier(Vector2Float position, int playerOwner)
             : base("Grenadier", 450, 450, position, playerOwner)

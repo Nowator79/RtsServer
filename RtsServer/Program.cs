@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using RtsServer.App;
 using RtsServer.App.Battle.Sim;
+using RtsServer.App.DataBase;
 using RtsServer.App.DebugDashboard;
 
 // Headless автотест движения (без TCP):
@@ -8,6 +9,12 @@ using RtsServer.App.DebugDashboard;
 if (args.Any(a => a is "--sim-movement" or "sim-movement"))
 {
     Environment.ExitCode = MovementSimulation.Run();
+    return;
+}
+
+if (args.Any(a => a is "--sim-crowd" or "sim-crowd"))
+{
+    Environment.ExitCode = CrowdMotionProbe.Run();
     return;
 }
 
@@ -24,6 +31,8 @@ try
 {
     CancellationToken cancellationToken = CancellationToken.None;
     int port = ConfigGameServer.Port;
+
+    ApplicationContext.WarmUp(logger);
 
     // Создаем и запускаем сервер
     using var server = new GameServer(port, cancellationToken);

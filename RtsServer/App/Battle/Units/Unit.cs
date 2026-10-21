@@ -15,14 +15,13 @@ namespace RtsServer.App.Battle.Units
     {
         private const double RotationThreshold = 5.0;
         private const double PositionThreshold = 0.05;
-        private const double SpeedAdjustmentFactor = 1.0;
-        /// <summary>Стоящий юнит не уедет — сразу строим объезд.</summary>
-        private const int TrafficRepathParkedFrames = 2;
-        /// <summary>Чужой/враг едет по клетке — подождать перед объездом.</summary>
-        private const int TrafficRepathMovingFrames = 12;
+        private const double SpeedAdjustmentFactor = 2.0;
 
         /// <summary>Занимает клетку для наземной навигации (самолёты — нет).</summary>
         public virtual bool OccupiesGroundCell => true;
+
+        /// <summary>Радиус круглой коллизии. Техника: диаметр 0.5. Пехота переопределяет радиус на 0.1.</summary>
+        public virtual double CollisionRadius => OccupiesGroundCell ? 0.25 : 0;
 
         /// <summary>Домен цели для ПВО/наземного оружия.</summary>
         public virtual AttackTargetDomain AttackDomain => AttackTargetDomain.Ground;
@@ -44,13 +43,16 @@ namespace RtsServer.App.Battle.Units
         public bool IsParked =>
             !IsMoving && !targetPoint.HasValue && (PathRoute == null || PathRoute.Count == 0);
 
+        /// <summary>Высота рельефа под юнитом (world Y локальной карты).</summary>
+        public virtual double GetGroundElevation() => TerrainHeights.SampleAt(Game, Position);
+
         /// <summary>Высота корпуса юнита (для попадания по нему).</summary>
-        public virtual double GetBodyHeight() => 0.5;
+        public virtual double GetBodyHeight() => GetGroundElevation() + 0.5;
 
         public Vector2Float AimPosition => Position;
 
         /// <summary>Высота точки выстрела (дуло / подвеска).</summary>
-        public virtual double GetMuzzleHeight() => 0.9;
+        public virtual double GetMuzzleHeight() => GetGroundElevation() + 0.9;
 
         /// <summary>
         /// Автозахват врагов в радиусе. По умолчанию вкл (стоячие юниты отвечают на угрозу).
@@ -79,7 +81,6 @@ namespace RtsServer.App.Battle.Units
         public event Action AfterChunkUpdate;
 
         private Vector2Int? targetPoint;
-        private int _trafficBlockedFrames;
         /// <summary>Обычный ход: до прибытия не стреляем, после — снова можно.</summary>
         private bool _holdFireUntilIdle;
         /// <summary>Конечная точка attack-move (куда возвращаемся после боя).</summary>
@@ -89,6 +90,21 @@ namespace RtsServer.App.Battle.Units
         private Vector2Int? _chaseCell;
         /// <summary>Стоим и стреляем — путь не сбрасываем.</summary>
         private bool _holdingForAttack;
+        /// <summary>Враг в радиусе — доезжаем до центра клетки, потом держим огонь.</summary>
+        private bool _holdAfterWaypoint;
+        /// <summary>Свежий attack-move: сначала едем, не встаём в той же клетке.</summary>
+        private bool _attackMoveGrace;
+        private Vector2Int _attackMoveGraceCell;
+        private double _attackMoveGraceUntil;
+        /// <summary>Прошлая клетка — не шагаем назад (анти-осцилляция толпы).</summary>
+        private Vector2Int? _prevCell;
+        private readonly Vector2Int[] _recentCells = new Vector2Int[8];
+        private int _recentCount;
+        private Vector2Int _stuckCell;
+        private int _stuckTicks;
+        private int _bodyBlockedTicks;
+        /// <summary>Следующий A* считает чужие тела стенами. Включать только на один поиск.</summary>
+        internal bool NavBlockBodies;
         private ILogger<Unit> _logger;
         private bool _disposed;
 
@@ -140,17 +156,21 @@ namespace RtsServer.App.Battle.Units
             CanAutoAcquireTargets = true;
             _holdFireUntilIdle = false;
             _holdingForAttack = false;
+            _holdAfterWaypoint = false;
             _chaseCell = null;
+            _prevCell = null;
 
             if (attackMove)
             {
                 _attackMoveGoal = targetPosition;
                 _engageTarget = null;
+                BeginAttackMoveGrace();
             }
             else
             {
                 _attackMoveGoal = null;
                 _engageTarget = null;
+                _attackMoveGrace = false;
             }
 
             // Цель атаки не сбрасываем на обычном ходе — пушка может вести огонь по дороге.
@@ -182,17 +202,21 @@ namespace RtsServer.App.Battle.Units
             CanAutoAcquireTargets = true;
             _holdFireUntilIdle = false;
             _holdingForAttack = false;
+            _holdAfterWaypoint = false;
             _chaseCell = null;
+            _prevCell = null;
 
             if (attackMove)
             {
                 _attackMoveGoal = destination;
                 _engageTarget = null;
+                BeginAttackMoveGrace();
             }
             else
             {
                 _attackMoveGoal = null;
                 _engageTarget = null;
+                _attackMoveGrace = false;
             }
 
             Vector2Int here = GetPathStartCell();
@@ -200,6 +224,8 @@ namespace RtsServer.App.Battle.Units
             if (cells.Count == 0 || !cells[^1].Equals(destination))
                 cells.Add(destination);
             cells = GridPathUtil.EnsureAdjacent(cells);
+            if (Game?.Map != null)
+                cells = PathSmoother.Smooth(cells, Game.Map, Game);
 
             var queue = new Queue<Vector2Int>();
             Vector2Int? last = null;
@@ -214,6 +240,7 @@ namespace RtsServer.App.Battle.Units
             }
 
             SetPathRoute(queue);
+
             return this;
         }
 
@@ -282,11 +309,12 @@ namespace RtsServer.App.Battle.Units
             const double stopRangeFactor = 0.92;
             const double resumeChaseFactor = 1.05;
 
-            if (_engageTarget != null && _engageTarget.IsDestroyed)
+            if (_engageTarget != null && (_engageTarget.IsDestroyed || !Game.CanSee(OwnerId, _engageTarget.AimPosition)))
             {
                 _engageTarget = null;
                 _chaseCell = null;
                 _holdingForAttack = false;
+                _holdAfterWaypoint = false;
                 ClearTurretTargets();
             }
 
@@ -300,6 +328,7 @@ namespace RtsServer.App.Battle.Units
                     _engageTarget = null;
                     _chaseCell = null;
                     _holdingForAttack = false;
+                    _holdAfterWaypoint = false;
                     ClearTurretTargets();
                 }
                 else if (nearest != null && !ReferenceEquals(nearest, _engageTarget))
@@ -317,6 +346,7 @@ namespace RtsServer.App.Battle.Units
             if (_engageTarget == null)
             {
                 _holdingForAttack = false;
+                _holdAfterWaypoint = false;
                 _chaseCell = null;
                 ClearTurretTargets();
                 ResumeAttackMoveGoalIfNeeded();
@@ -325,33 +355,68 @@ namespace RtsServer.App.Battle.Units
 
             double dist = Vector2Float.Distance(Position, _engageTarget.AimPosition);
             double stopAt = weaponRange * stopRangeFactor;
-            double chaseAgainAt = weaponRange * resumeChaseFactor;
+            double resumeMarch = weaponRange * resumeChaseFactor;
 
+            // Уже держим клетку и бьём — пока цель в радиусе, стоим. Уехала — снова к точке приказа.
             if (_holdingForAttack)
             {
-                // Уже стоим в огне: если цель отъехала — снова догоняем.
-                if (dist <= chaseAgainAt)
+                if (dist <= resumeMarch)
                 {
                     ApplyAttackTargetToTurrets(_engageTarget);
                     return;
                 }
 
                 _holdingForAttack = false;
+                ResumeAttackMoveGoalIfNeeded();
+                return;
             }
 
             if (dist <= stopAt)
             {
                 ApplyAttackTargetToTurrets(_engageTarget);
-                _holdingForAttack = true;
-                CurrentSpeed = 0;
-                IsMoving = false;
+                if (InAttackMoveGrace())
+                {
+                    _holdAfterWaypoint = false;
+                    return;
+                }
+
+                // AoW3 assault: доезжаем до центра клетки, потом стоим. Не на полклетки.
+                if (targetPoint.HasValue)
+                {
+                    double toCell = Vector2Float.Distance(Position, targetPoint.Value.GetFloat());
+                    if (toCell >= PositionThreshold)
+                    {
+                        _holdAfterWaypoint = true;
+                        return;
+                    }
+                }
+
+                EnterAttackHold();
                 return;
             }
 
-            // Вне радиуса — турели молчат, едем к цели.
+            // Вне радиуса — идём к точке приказа (не срываем строй погоней за врагом).
+            _holdAfterWaypoint = false;
             ClearTurretTargets();
-            _holdingForAttack = false;
-            ChaseEngageTarget(_engageTarget);
+            ResumeAttackMoveGoalIfNeeded();
+        }
+
+        private void EnterAttackHold()
+        {
+            _holdAfterWaypoint = false;
+            _holdingForAttack = true;
+            CurrentSpeed = 0;
+            IsMoving = false;
+
+            if (targetPoint.HasValue)
+                Position = targetPoint.Value.GetFloat();
+            else
+                Position = Position.ToInt().GetFloat();
+
+            targetPoint = null;
+            // PathRoute и _attackMoveGoal остаются — после боя продолжим.
+            if (_attackMoveGoal is Vector2Int goal)
+                TargetPosition = goal;
         }
 
         private void ClearTurretTargets()
@@ -386,6 +451,15 @@ namespace RtsServer.App.Battle.Units
             catch (Exception ex)
             {
                 _logger?.LogError(ex, "Chase repath failed for unit {UnitId}", Id);
+            }
+
+            // Погоня не построилась и идти некуда — не замираем, возвращаемся к точке приказа.
+            if (!HasActiveRoute)
+            {
+                _engageTarget = null;
+                _chaseCell = null;
+                _holdingForAttack = false;
+                ResumeAttackMoveGoalIfNeeded();
             }
         }
 
@@ -497,6 +571,7 @@ namespace RtsServer.App.Battle.Units
             {
                 if (other == null || other == this || other.IsDestroyed) continue;
                 if (other.OwnerId == OwnerId) continue;
+                if (!Game.CanSee(OwnerId, other.AimPosition)) continue;
                 if (!CanAnyTurretEngage(other)) continue;
                 double dist = Vector2Float.Distance(Position, other.AimPosition);
                 if (dist >= bestDist) continue;
@@ -508,6 +583,7 @@ namespace RtsServer.App.Battle.Units
             {
                 if (construction == null || construction.IsDestroyed) continue;
                 if (construction.OwnerId == OwnerId) continue;
+                if (!Game.CanSee(OwnerId, construction.AimPosition)) continue;
                 if (!CanAnyTurretEngage(construction)) continue;
                 double dist = Vector2Float.Distance(Position, construction.AimPosition);
                 if (dist >= bestDist) continue;
@@ -518,10 +594,32 @@ namespace RtsServer.App.Battle.Units
             return best;
         }
 
-        /// <summary>
-        /// Старт для построения маршрута: текущая точка движения (waypoint), если есть, иначе позиция юнита.
-        /// </summary>
-        internal Vector2Int GetPathStartCell() => targetPoint ?? Position.ToInt();
+        /// <summary>Есть куда ехать: текущая клетка шага или хвост маршрута.</summary>
+        internal bool HasActiveRoute =>
+            targetPoint.HasValue || (PathRoute != null && PathRoute.Count > 0);
+
+        /// <summary>Старт нового маршрута — клетка, на которой юнит стоит сейчас, а не старая точка пути.</summary>
+        internal Vector2Int GetPathStartCell() => Position.ToInt();
+
+        private void BeginAttackMoveGrace()
+        {
+            _attackMoveGrace = true;
+            _attackMoveGraceCell = Position.ToInt();
+            _attackMoveGraceUntil = Game != null ? Game.TimeSystem.GetTime() + 0.8 : 0;
+        }
+
+        /// <summary>Только что дали attack-move — не замираем в той же клетке.</summary>
+        private bool InAttackMoveGrace()
+        {
+            if (!_attackMoveGrace || Game == null)
+                return false;
+            if (!Position.ToInt().Equals(_attackMoveGraceCell) || Game.TimeSystem.GetTime() >= _attackMoveGraceUntil)
+            {
+                _attackMoveGrace = false;
+                return false;
+            }
+            return true;
+        }
 
         /// <summary>
         /// Текущая промежуточная точка маршрута (куда юнит едет сейчас), если есть.
@@ -541,7 +639,21 @@ namespace RtsServer.App.Battle.Units
         {
             PathRoute = route ?? throw new ArgumentNullException(nameof(route));
             targetPoint = null;
-            _trafficBlockedFrames = 0;
+        }
+
+        /// <summary>
+        /// Новый маршрут без сброса текущей промежуточной клетки — юнит доезжает, потом едет дальше.
+        /// </summary>
+        public void SetPathRouteKeepingCurrentWaypoint(Queue<Vector2Int> route)
+        {
+            if (route == null)
+                throw new ArgumentNullException(nameof(route));
+
+            if (targetPoint.HasValue && route.Count > 0 && route.Peek().Equals(targetPoint.Value))
+                route.Dequeue();
+
+            PathRoute = route;
+            // targetPoint не трогаем.
         }
 
         /// <summary>
@@ -573,13 +685,28 @@ namespace RtsServer.App.Battle.Units
                 return;
             }
 
-            if (!HasNextTargetPoint())
+            // Финиш — окрестность точки, не центр клетки. Иначе толпа снова стягивается в одну точку.
+            bool routeLeft = PathRoute != null && PathRoute.Count > 0;
+            bool lastLeg = !routeLeft && (!targetPoint.HasValue || targetPoint.Value.Equals(TargetPosition));
+            if (OccupiesGroundCell
+                && lastLeg
+                && Vector2Float.Distance(Position, TargetPosition.GetFloat()) <= Math.Max(PositionThreshold, CollisionRadius * 2.05))
             {
-                _trafficBlockedFrames = 0;
+                targetPoint = null;
+                PathRoute?.Clear();
                 StopMoving();
                 return;
             }
 
+            if (!HasNextTargetPoint())
+            {
+                StopMoving();
+                return;
+            }
+
+            BreakDiagonalWaypoint();
+
+            // Тела друг друга не блокируют клетку: расхождение делает круглый толчок.
             // Постройка на следующей клетке (или построили на маршруте) — сразу перестраиваем путь.
             if (targetPoint.HasValue && NavHelper.IsBlockedByConstruction(Game, targetPoint.Value))
             {
@@ -591,8 +718,12 @@ namespace RtsServer.App.Battle.Units
                     return;
             }
 
-            if (HandleTrafficOnNextTile())
+            if (!targetPoint.HasValue)
+            {
+                CurrentSpeed = 0;
+                IsMoving = false;
                 return;
+            }
 
             double deltaTime = Game.TimeSystem.GetDelta();
             Vector2Float targetPosition = GetCurrentTargetPosition();
@@ -602,6 +733,8 @@ namespace RtsServer.App.Battle.Units
             {
                 SnapToTarget(targetPosition);
                 AdvanceToNextPoint();
+                if (_holdAfterWaypoint && IsAttackMoving)
+                    EnterAttackHold();
                 return;
             }
 
@@ -619,123 +752,233 @@ namespace RtsServer.App.Battle.Units
         }
 
         /// <summary>
-        /// Занятая следующая клетка: за союзником в колонне — просто ждём;
-        /// объезд только если впереди стоячий / враг / долгий затык.
+        /// Локальный обход (SC / AoW3): путь стабильный, конфликт — шаг только ближе к слоту.
+        /// Без полного A* на каждый затык и без «жду пока проедет».
         /// </summary>
-        /// <returns>true — этот кадр стоим.</returns>
         private bool HandleTrafficOnNextTile()
         {
-            if (!targetPoint.HasValue || !IsNextTileOccupiedByOther())
+            Vector2Int here = Position.ToInt();
+            if (!here.Equals(_stuckCell))
             {
-                _trafficBlockedFrames = 0;
+                _stuckCell = here;
+                _stuckTicks = 0;
+            }
+
+            if (!targetPoint.HasValue || !IsCellBlockedForStep(targetPoint.Value))
+                return false;
+
+            Vector2Int blocked = targetPoint.Value;
+
+            if (IsParkedOccupant(blocked) && (_stuckTicks == 0 || _stuckTicks >= 40))
+            {
+                RepathAroundBodies(blockMoving: false);
+                _stuckTicks = 15;
+                if (!targetPoint.HasValue)
+                    HasNextTargetPoint();
+                if (!targetPoint.HasValue)
+                {
+                    CurrentSpeed = 0;
+                    IsMoving = false;
+                    return true;
+                }
+                if (!IsCellBlockedForStep(targetPoint.Value))
+                    return false;
+            }
+            else if (TryYieldToLowerId(here, blocked))
+            {
+                _stuckTicks = 0;
                 return false;
             }
 
+            _stuckTicks++;
             CurrentSpeed = 0;
-            IsMoving = true;
+            IsMoving = false;
+            return true;
+        }
 
-            // Союзник едет впереди по тому же направлению — не разворачиваемся в бок.
-            if (IsFriendlyMoverBlockingAhead())
+        /// <summary>Нас просит клетка юнит с меньшим id — сходим в свободного соседа, маршрут сохраняем.</summary>
+        private bool TryYieldToLowerId(Vector2Int here, Vector2Int blocked)
+        {
+            if (Game?.Units == null || Game.Map == null)
+                return false;
+
+            bool wanted = false;
+            foreach (Unit other in Game.Units)
             {
-                _trafficBlockedFrames = 0;
-                return true;
+                if (other == null || other == this || other.IsDestroyed || !other.OccupiesGroundCell)
+                    continue;
+                Vector2Int? step = other.GetCurrentWaypoint();
+                if (step.HasValue && step.Value.Equals(here) && other.Id < Id)
+                {
+                    wanted = true;
+                    break;
+                }
             }
+            if (!wanted)
+                return false;
 
-            _trafficBlockedFrames++;
-            int repathAfter = IsNextTileBlockedByParked()
-                ? TrafficRepathParkedFrames
-                : TrafficRepathMovingFrames;
+            int hereScore = ChebyshevNav(here, TargetPosition);
+            Vector2Int? best = null;
+            int bestScore = int.MaxValue;
+            foreach (Vector2Int near in NavHelper.GetSafeNear(here, Game.Map.Width, Game.Map.Length))
+            {
+                if (near.Equals(blocked) || near.Equals(here) || IsRecentCell(near))
+                    continue;
+                if (!IsCellFreeToEnter(near))
+                    continue;
+                int score = ChebyshevNav(near, TargetPosition);
+                if (score > hereScore + 1 || score >= bestScore)
+                    continue;
+                bestScore = score;
+                best = near;
+            }
+            if (!best.HasValue)
+                return false;
 
-            if (_trafficBlockedFrames < repathAfter)
-                return true;
+            var kept = new Queue<Vector2Int>();
+            kept.Enqueue(blocked);
+            Vector2Int tail = blocked;
+            if (PathRoute != null)
+            {
+                while (PathRoute.Count > 0)
+                {
+                    Vector2Int cell = PathRoute.Dequeue();
+                    if (cell.Equals(tail))
+                        continue;
+                    kept.Enqueue(cell);
+                    tail = cell;
+                }
+            }
+            RememberCell(here);
+            PathRoute = kept;
+            targetPoint = best;
+            return true;
+        }
 
-            _trafficBlockedFrames = 0;
-            Vector2Int blocked = targetPoint.Value;
+        /// <summary>Обход толпы одним поиском: чужие тела — стены, старт с текущей клетки.</summary>
+        private void RepathAroundBodies(bool blockMoving)
+        {
+            _stuckTicks = 0;
+            Vector2Int? savedPoint = targetPoint;
+            Queue<Vector2Int> savedRoute = PathRoute == null
+                ? new Queue<Vector2Int>()
+                : new Queue<Vector2Int>(PathRoute);
+
             targetPoint = null;
+            PathRoute = new Queue<Vector2Int>();
+            NavBlockBodies = blockMoving;
             try
             {
-                // Не меняем финиш — иначе весь строй «расползается» вбок при каждой пробке.
                 Navigator.StartRepath();
             }
             catch (Exception ex)
             {
-                _logger?.LogError(ex, "Traffic repath failed for unit {UnitId}", Id);
+                _logger?.LogError(ex, "Body repath failed for unit {UnitId}", Id);
             }
-
-            if (!HasNextTargetPoint() || IsNextTileOccupiedByOther())
+            finally
             {
-                targetPoint = null;
-                if (!TrySidestepForward(blocked))
-                    return true;
+                NavBlockBodies = false;
             }
 
-            return false;
+            if (!HasActiveRoute)
+            {
+                targetPoint = savedPoint;
+                PathRoute = savedRoute;
+            }
         }
 
-        /// <summary>Впереди свой едущий юнит — колонна, ждём.</summary>
-        private bool IsFriendlyMoverBlockingAhead()
-        {
-            if (!targetPoint.HasValue || Game?.Map == null)
-                return false;
-
-            var tile = Game.Map.GetArrayMap()[targetPoint.Value.X, targetPoint.Value.Y];
-            if (tile?.UnitsInPoint == null)
-                return false;
-
-            bool sawFriendlyMover = false;
-            foreach (Unit other in tile.UnitsInPoint)
-            {
-                if (other == null || other == this || other.IsDestroyed || !other.OccupiesGroundCell)
-                    continue;
-
-                if (other.OwnerId != OwnerId)
-                    return false;
-
-                if (other.IsParked)
-                    return false;
-
-                sawFriendlyMover = true;
-            }
-
-            return sawFriendlyMover;
-        }
-
-        /// <summary>Шаг только вперёд/вбок к цели, назад не уезжаем.</summary>
-        private bool TrySidestepForward(Vector2Int blocked)
+        /// <summary>
+        /// Шаг вплотную к занятой клетке маршрута и не дальше от своего слота.
+        /// Занятую клетку возвращаем в голову очереди.
+        /// </summary>
+        private bool TryStepAside(Vector2Int here, Vector2Int blocked)
         {
             if (Game?.Map == null)
                 return false;
 
-            Vector2Int here = Position.ToInt();
-            int hereDist = Dist2(here, TargetPosition);
+            Vector2Int anchor = TargetPosition;
+            if (PathRoute != null)
+            {
+                foreach (Vector2Int cell in PathRoute)
+                {
+                    if (!cell.Equals(blocked))
+                    {
+                        anchor = cell;
+                        break;
+                    }
+                }
+            }
+
+            int blockedCheb = ChebyshevNav(blocked, anchor);
+            int hereToSlot = ChebyshevNav(here, TargetPosition);
             Vector2Int? best = null;
             int bestScore = int.MaxValue;
 
             foreach (Vector2Int near in NavHelper.GetSafeNear(here, Game.Map.Width, Game.Map.Length))
             {
-                if (near.Equals(blocked) || !IsCellFree(near))
+                if (near.Equals(blocked) || near.Equals(here))
+                    continue;
+                if (IsRecentCell(near))
+                    continue;
+                if (ChebyshevNav(near, blocked) > 1)
+                    continue;
+                if (ChebyshevNav(near, TargetPosition) > hereToSlot)
+                    continue;
+                if (!IsCellFreeToEnter(near))
                     continue;
 
-                int nearDist = Dist2(near, TargetPosition);
-                // Не отъезжать от цели дальше, чем стоим сейчас.
-                if (nearDist > hereDist)
+                int score = ChebyshevNav(near, anchor);
+                if (score > blockedCheb + 1)
+                    continue;
+                if (score >= bestScore)
                     continue;
 
-                if (nearDist >= bestScore)
-                    continue;
-
-                bestScore = nearDist;
+                bestScore = score;
                 best = near;
             }
 
             if (!best.HasValue)
                 return false;
 
-            targetPoint = best;
-            while (PathRoute != null && PathRoute.Count > 0 && !IsCellFree(PathRoute.Peek()))
-                PathRoute.Dequeue();
+            var kept = new Queue<Vector2Int>();
+            kept.Enqueue(blocked);
+            Vector2Int tail = blocked;
+            if (PathRoute != null)
+            {
+                while (PathRoute.Count > 0)
+                {
+                    Vector2Int cell = PathRoute.Dequeue();
+                    if (cell.Equals(tail))
+                        continue;
+                    kept.Enqueue(cell);
+                    tail = cell;
+                }
+            }
 
+            RememberCell(here);
+            PathRoute = kept;
+            _prevCell = here;
+            targetPoint = best;
             return true;
+        }
+
+        private bool IsRecentCell(Vector2Int cell)
+        {
+            int n = Math.Min(_recentCount, _recentCells.Length);
+            for (int i = 0; i < n; i++)
+            {
+                if (_recentCells[i].Equals(cell))
+                    return true;
+            }
+            return false;
+        }
+
+        private void RememberCell(Vector2Int cell)
+        {
+            if (_recentCount > 0 && _recentCells[(_recentCount - 1) % _recentCells.Length].Equals(cell))
+                return;
+            _recentCells[_recentCount % _recentCells.Length] = cell;
+            _recentCount++;
         }
 
         private static int Dist2(Vector2Int a, Vector2Int b)
@@ -745,69 +988,167 @@ namespace RtsServer.App.Battle.Units
             return dx * dx + dy * dy;
         }
 
-        private bool IsCellFree(Vector2Int cell)
+        private bool IsCellBlockedForStep(Vector2Int cell) => !IsCellFreeToEnter(cell);
+
+        /// <summary>Стоячего на клетке просят отойти, чтобы пропустили. Потом он вернётся в свой слот.</summary>
+        internal bool NudgeOff(Vector2Int requesterCell)
+        {
+            if (!IsParked || Game?.Map == null)
+                return false;
+
+            Vector2Int here = Position.ToInt();
+            Vector2Int? best = null;
+            int bestDist = -1;
+            foreach (Vector2Int near in NavHelper.GetSafeNear(here, Game.Map.Width, Game.Map.Length))
+            {
+                if (!IsCellFreeToEnter(near))
+                    continue;
+                int dist = ChebyshevNav(near, requesterCell);
+                if (dist > bestDist)
+                {
+                    bestDist = dist;
+                    best = near;
+                }
+            }
+            if (!best.HasValue)
+                return false;
+
+            var back = new Queue<Vector2Int>();
+            back.Enqueue(TargetPosition);
+            PathRoute = back;
+            targetPoint = best;
+            IsMoving = true;
+            return true;
+        }
+
+        private Unit? FindParkedOccupant(Vector2Int cell)
+        {
+            if (Game?.Map == null) return null;
+            var tile = Game.Map.GetArrayMap()[cell.X, cell.Y];
+            if (tile?.UnitsInPoint == null) return null;
+            foreach (Unit other in tile.UnitsInPoint)
+            {
+                if (other == null || other == this || other.IsDestroyed || !other.OccupiesGroundCell)
+                    continue;
+                if (other.IsParked)
+                    return other;
+            }
+            return null;
+        }
+
+        private bool IsParkedOccupant(Vector2Int cell) => FindParkedOccupant(cell) != null;
+
+        /// <summary>
+        /// Можно ли войти: рельеф, постройка, тело на клетке, чужой текущий шаг.
+        /// Едущий, который уже уходит с клетки, клетку не держит.
+        /// </summary>
+        private bool IsCellFreeToEnter(Vector2Int cell)
         {
             var map = Game.Map.GetArrayMap();
             if (cell.X < 0 || cell.Y < 0 || cell.X >= map.GetLength(0) || cell.Y >= map.GetLength(1))
                 return false;
 
             var tile = map[cell.X, cell.Y];
-            if (tile == null || tile.Height != 1 || tile.Id == 0)
+            if (!NavHelper.IsWalkableHeight(tile))
                 return false;
+
+            Vector2Int here = Position.ToInt();
+            if (here.X >= 0 && here.Y >= 0 && here.X < map.GetLength(0) && here.Y < map.GetLength(1))
+            {
+                var from = map[here.X, here.Y];
+                if (from != null && !NavHelper.CanStepHeight(from.Height, tile.Height))
+                    return false;
+
+                int dx = cell.X - here.X;
+                int dy = cell.Y - here.Y;
+                if (dx != 0 && dy != 0)
+                {
+                    int cx = here.X + dx;
+                    int cy = here.Y + dy;
+                    if (cx < 0 || cy < 0 || cx >= map.GetLength(0) || cy >= map.GetLength(1))
+                        return false;
+                    var cornerA = map[cx, here.Y];
+                    var cornerB = map[here.X, cy];
+                    if (cornerA == null || cornerB == null)
+                        return false;
+                    if (!NavHelper.CanStepHeight(from.Height, cornerA.Height)
+                        || !NavHelper.CanStepHeight(from.Height, cornerB.Height))
+                        return false;
+                }
+            }
 
             if (NavHelper.IsBlockedByConstruction(Game, cell))
                 return false;
 
-            if (tile.UnitsInPoint == null)
+            if (tile.UnitsInPoint != null)
+            {
+                foreach (Unit other in tile.UnitsInPoint)
+                {
+                    if (other == null || other == this || other.IsDestroyed || !other.OccupiesGroundCell)
+                        continue;
+                    return false;
+                }
+            }
+
+            if (Game?.Units == null)
                 return true;
 
-            foreach (Unit other in tile.UnitsInPoint)
+            int myDist = ChebyshevNav(Position.ToInt(), cell);
+            foreach (Unit other in Game.Units)
             {
                 if (other == null || other == this || other.IsDestroyed || !other.OccupiesGroundCell)
                     continue;
-                return false;
+                Vector2Int? step = other.GetCurrentWaypoint();
+                if (!step.HasValue || !step.Value.Equals(cell))
+                    continue;
+                int theirDist = ChebyshevNav(other.Position.ToInt(), cell);
+                if (theirDist < myDist || (theirDist == myDist && other.Id < Id))
+                    return false;
             }
 
             return true;
         }
 
-        private bool IsNextTileOccupiedByOther()
+        private static int ChebyshevNav(Vector2Int a, Vector2Int b) =>
+            Math.Max(Math.Abs(a.X - b.X), Math.Abs(a.Y - b.Y));
+
+        /// <summary>
+        /// Диагональ между центрами клеток проходит через угол. Шагаем только кардинально,
+        /// иначе пол клетки оказывается на обрыве и юнит с него не сходит.
+        /// </summary>
+        private void BreakDiagonalWaypoint()
         {
             if (!targetPoint.HasValue || Game?.Map == null)
-                return false;
+                return;
 
-            var tile = Game.Map.GetArrayMap()[targetPoint.Value.X, targetPoint.Value.Y];
-            if (tile?.UnitsInPoint == null || tile.UnitsInPoint.Count == 0)
-                return false;
+            Vector2Int here = Position.ToInt();
+            Vector2Int tp = targetPoint.Value;
+            int dx = Math.Sign(tp.X - here.X);
+            int dy = Math.Sign(tp.Y - here.Y);
+            if (dx == 0 || dy == 0)
+                return;
+            if (Math.Abs(tp.X - here.X) > 1 || Math.Abs(tp.Y - here.Y) > 1)
+                return;
 
-            foreach (Unit other in tile.UnitsInPoint)
+            var horizontal = new Vector2Int(here.X + dx, here.Y);
+            var vertical = new Vector2Int(here.X, here.Y + dy);
+            Vector2Int? step = null;
+            if (IsCellFreeToEnter(horizontal))
+                step = horizontal;
+            else if (IsCellFreeToEnter(vertical))
+                step = vertical;
+            if (!step.HasValue)
+                return;
+
+            var kept = new Queue<Vector2Int>();
+            kept.Enqueue(tp);
+            if (PathRoute != null)
             {
-                if (other == null || other == this || other.IsDestroyed || !other.OccupiesGroundCell)
-                    continue;
-                return true;
+                while (PathRoute.Count > 0)
+                    kept.Enqueue(PathRoute.Dequeue());
             }
-
-            return false;
-        }
-
-        private bool IsNextTileBlockedByParked()
-        {
-            if (!targetPoint.HasValue || Game?.Map == null)
-                return false;
-
-            var tile = Game.Map.GetArrayMap()[targetPoint.Value.X, targetPoint.Value.Y];
-            if (tile?.UnitsInPoint == null)
-                return false;
-
-            foreach (Unit other in tile.UnitsInPoint)
-            {
-                if (other == null || other == this || other.IsDestroyed || !other.OccupiesGroundCell)
-                    continue;
-                if (other.IsParked)
-                    return true;
-            }
-
-            return false;
+            PathRoute = kept;
+            targetPoint = step;
         }
 
         private bool HasNextTargetPoint()
@@ -816,6 +1157,7 @@ namespace RtsServer.App.Battle.Units
 
             if (PathRoute != null && PathRoute.Count > 0)
             {
+                _prevCell = Position.ToInt();
                 targetPoint = PathRoute.Dequeue();
                 return true;
             }
@@ -848,7 +1190,6 @@ namespace RtsServer.App.Battle.Units
         private void AdvanceToNextPoint()
         {
             targetPoint = null;
-            _trafficBlockedFrames = 0;
         }
 
         private bool RotateTowardsTarget(Vector2Float target, double deltaTime)
@@ -878,14 +1219,94 @@ namespace RtsServer.App.Battle.Units
             var forward = Vector2Float.VectorByAngle(-Rotation).Normalize();
             var step = forward * CurrentSpeed * deltaTime;
             var newPosition = Position + step;
-
-            if (Vector2Float.DistanceSQRT(Position, newPosition) >= Vector2Float.DistanceSQRT(Position, target))
-            {
+            bool reached = Vector2Float.DistanceSQRT(Position, newPosition) >= Vector2Float.DistanceSQRT(Position, target);
+            if (reached)
                 newPosition = target;
-                AdvanceToNextPoint();
+
+            if (Game?.Map != null)
+            {
+                var tiles = Game.Map.GetArrayMap();
+                newPosition.X = Math.Clamp(newPosition.X, 0, tiles.GetLength(0) - 0.001);
+                newPosition.Y = Math.Clamp(newPosition.Y, 0, tiles.GetLength(1) - 0.001);
+                if (!TryMoveBody(newPosition))
+                {
+                    CurrentSpeed = 0;
+                    _bodyBlockedTicks++;
+                    if (_bodyBlockedTicks >= 10)
+                    {
+                        _bodyBlockedTicks = 0;
+                        try { Navigator.StartRepath(); }
+                        catch (Exception ex) { _logger?.LogError(ex, "Corner repath failed for unit {UnitId}", Id); }
+                    }
+                    return;
+                }
+
+                _bodyBlockedTicks = 0;
+            }
+            else
+            {
+                Position = newPosition;
             }
 
-            Position = newPosition;
+            if (reached && Vector2Float.Distance(Position, target) <= PositionThreshold)
+                AdvanceToNextPoint();
+        }
+
+        /// <summary>
+        /// Сдвинуть тело, если круг не задевает воду, обрыв, скалу или постройку.
+        /// Если целиком нельзя — скользим вдоль одной оси.
+        /// </summary>
+        internal bool TryMoveBody(Vector2Float desired)
+        {
+            if (!OccupiesGroundCell)
+            {
+                Position = desired;
+                return true;
+            }
+
+            if (CanOccupy(desired))
+            {
+                Position = desired;
+                UpdateChunkPosition();
+                return true;
+            }
+
+            Vector2Float xOnly = new(desired.X, Position.Y);
+            if (CanOccupy(xOnly))
+            {
+                Position = xOnly;
+                UpdateChunkPosition();
+                return true;
+            }
+
+            Vector2Float yOnly = new(Position.X, desired.Y);
+            if (CanOccupy(yOnly))
+            {
+                Position = yOnly;
+                UpdateChunkPosition();
+                return true;
+            }
+
+            return false;
+        }
+
+        private bool CanOccupy(Vector2Float pos)
+        {
+            if (Game?.Map == null)
+                return false;
+
+            var tiles = Game.Map.GetArrayMap();
+            int width = tiles.GetLength(0);
+            int length = tiles.GetLength(1);
+            Vector2Int stand = Position.ToInt();
+            if (stand.X < 0 || stand.Y < 0 || stand.X >= width || stand.Y >= length)
+                return false;
+
+            var standTile = tiles[stand.X, stand.Y];
+            if (standTile == null)
+                return false;
+            int standHeight = standTile.Height;
+            return !NavHelper.CircleHitsBlocked(Game.Map, Game, pos.X, pos.Y, CollisionRadius, standHeight);
         }
 
         private void UpdateSpeed(double deltaTime)

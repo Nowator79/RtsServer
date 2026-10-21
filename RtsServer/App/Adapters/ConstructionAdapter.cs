@@ -1,4 +1,4 @@
-﻿using RtsServer.App.Battle.Constructions;
+using RtsServer.App.Battle.Constructions;
 using RtsServer.App.Battle.Dto;
 using RtsServer.App.NetWorkDto;
 
@@ -16,22 +16,19 @@ namespace RtsServer.App.Adapters
             {
                 productionProgress = military.ProductionProgress;
                 productionUnitCode = military.CurrentProductionCode ?? "";
-                if (military.ProductionQueue.Count > 0)
-                    productionQueue = string.Join(",", military.ProductionQueue);
+                productionQueue = military.ProductionQueueCsv;
             }
             else if (construction is AirFactoryConstruction air)
             {
                 productionProgress = air.ProductionProgress;
                 productionUnitCode = air.CurrentProductionCode ?? "";
-                if (air.ProductionQueue.Count > 0)
-                    productionQueue = string.Join(",", air.ProductionQueue);
+                productionQueue = air.ProductionQueueCsv;
             }
             else if (construction is BarracksConstruction barracks)
             {
                 productionProgress = barracks.ProductionProgress;
                 productionUnitCode = barracks.CurrentProductionCode ?? "";
-                if (barracks.ProductionQueue.Count > 0)
-                    productionQueue = string.Join(",", barracks.ProductionQueue);
+                productionQueue = barracks.ProductionQueueCsv;
             }
 
             float buildDuration = construction.IsBuilt ? 0f : construction.BuildDurationSeconds;

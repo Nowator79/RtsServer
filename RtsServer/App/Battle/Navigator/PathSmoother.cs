@@ -36,16 +36,50 @@ namespace RtsServer.App.Battle.Navigator
             return result;
         }
 
-        /// <summary>Все клетки суперкавера линии проходимы.</summary>
+        /// <summary>Зазор прямой: диаметр техники 0.5, чтобы срез угла не втыкал корпус в здание.</summary>
+        private const double PathClearance = 0.25;
+
+        /// <summary>Все клетки суперкавера линии проходимы, и корпус не задевает угол.</summary>
         public static bool HasLineOfSight(Vector2Int from, Vector2Int to, Map map, Game? game)
         {
+            int prevHeight = map.GetArrayMap()[from.X, from.Y].Height;
             foreach (Vector2Int cell in SupercoverLine(from, to))
             {
-                if (cell.Equals(from) || cell.Equals(to))
-                    continue;
                 if (!NavHelper.IsTerrainWalkable(map, game, cell))
                     return false;
+                int height = map.GetArrayMap()[cell.X, cell.Y].Height;
+                if (!NavHelper.CanStepHeight(prevHeight, height))
+                    return false;
+                prevHeight = height;
             }
+
+            return SegmentClearsBody(from, to, map, game);
+        }
+
+        /// <summary>Точки отрезка между центрами клеток не проникают в блок кругом техники.</summary>
+        private static bool SegmentClearsBody(Vector2Int from, Vector2Int to, Map map, Game? game)
+        {
+            var tiles = map.GetArrayMap();
+            int width = tiles.GetLength(0);
+            int length = tiles.GetLength(1);
+            double dx = to.X - from.X;
+            double dy = to.Y - from.Y;
+            double len = Math.Sqrt(dx * dx + dy * dy);
+            int steps = Math.Max(1, (int)Math.Ceiling(len / 0.1));
+            for (int i = 0; i <= steps; i++)
+            {
+                double t = i / (double)steps;
+                double x = from.X + dx * t;
+                double y = from.Y + dy * t;
+                int cx = NavHelper.CenteredCell(x);
+                int cy = NavHelper.CenteredCell(y);
+                if (cx < 0 || cy < 0 || cx >= width || cy >= length || tiles[cx, cy] == null)
+                    return false;
+                int height = tiles[cx, cy].Height;
+                if (NavHelper.CircleHitsBlocked(map, game, x, y, PathClearance, height))
+                    return false;
+            }
+
             return true;
         }
 

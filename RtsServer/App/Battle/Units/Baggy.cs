@@ -16,7 +16,7 @@ namespace RtsServer.App.Battle.Units
             AttackingPoints = [new BaggyMachineGun(this)];
         }
 
-        public override double GetBodyHeight() => 0.35;
-        public override double GetMuzzleHeight() => 0.4;
+        public override double GetBodyHeight() => GetGroundElevation() + 0.35;
+        public override double GetMuzzleHeight() => GetGroundElevation() + 0.4;
     }
 }

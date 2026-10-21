@@ -1,0 +1,39 @@
+{
+  "MapCode": "demo_mountain",
+  "StartingResources": 1000,
+  "PlayerStarts": [
+    {
+      "PlayerOwnerNum": 0,
+      "CameraPosition": {
+        "X": 25,
+        "Y": 11
+      }
+    },
+    {
+      "PlayerOwnerNum": 1,
+      "CameraPosition": {
+        "X": 28,
+        "Y": 53
+      }
+    }
+  ],
+  "Constructions": [
+    {
+      "PlayerOwnerNum": 1,
+      "Code": "HeadquartersConstruction",
+      "Position": {
+        "X": 27,
+        "Y": 53
+      }
+    },
+    {
+      "PlayerOwnerNum": 0,
+      "Code": "HeadquartersConstruction",
+      "Position": {
+        "X": 27,
+        "Y": 12
+      }
+    }
+  ],
+  "Units": []
+}

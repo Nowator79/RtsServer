@@ -6,11 +6,12 @@ using RtsServer.App.Battle.Interfaces;
 using RtsServer.App.Battle.MapBattle;
 using RtsServer.App.Battle.Navigator;
 using RtsServer.App.Battle.Units;
+using RtsServer.App.DataBase;
+using RtsServer.App.DataBase.Dto;
 using RtsServer.App.NetWorkDto.Response;
 using RtsServer.App.NetWorkResponseSender;
 using RtsServer.App.Tools;
 using System.Numerics;
-using System.Text;
 using System.Text.Json;
 using System.Threading;
 using static RtsServer.App.Battle.Player;
@@ -35,12 +36,16 @@ namespace RtsServer.App.Battle
         private bool _endResultSent;
         private int _victoryWinnerId = -1;
         private double _victoryEndTimer = -1;
+        /// <summary>Игроки, у которых уже было хотя бы одно здание (чтобы не закрывать матч на спавне).</summary>
+        private readonly HashSet<int> _playersEverHadBuildings = new();
+        private double _matchAgeSeconds;
         /// <summary>1 = идёт отправка полного снапшота; пропускаем тики, чтобы не копить очередь в TCP.</summary>
         private int _gameSyncInFlight;
         private int _gameSyncPending;
         private int _playerStatsInFlight;
-        /// <summary>Счётчик тиков до сетевого синка (2 ≈ 10 Гц при Delay 50ms).</summary>
-        private int _ticksSinceGameSync;
+        private double _playerStatsCooldown;
+        private readonly GameSyncCache _syncCache = new();
+        private readonly FogOfWar _fog = new();
 
         public int Id { get; }
         public long CreateDateTime { get; }
@@ -54,6 +59,9 @@ namespace RtsServer.App.Battle
         public HashSet<Construction> ConstructionsForAdd { get; } = [];
         public BattleManager? BattleManager { get; }
         public TimeSystem TimeSystem { get; }
+
+        /// <summary>Клетка сейчас в зрении этого игрока (свои юниты и достроенные здания).</summary>
+        public bool CanSee(int playerId, Vector2Float position) => _fog.CanSee(playerId, position);
 
         /// <summary>Headless-симуляция без сети / BattleManager.</summary>
         public bool IsSimulation { get; }
@@ -140,7 +148,7 @@ namespace RtsServer.App.Battle
             GivePlayersStartingResources();
             Players.ForEach(p => p.PlayerState = PlayerStateType.Playing);
 
-            QueueGameSync();
+            QueueGameSync(forceFull: true);
 
             UpdateEvent += TimeSystem.Update;
 
@@ -178,30 +186,45 @@ namespace RtsServer.App.Battle
         /// Ставит в очередь снимок. Сериализация JSON уходит в ThreadPool —
         /// раньше GameAdapter.Get + Serialize шли синхронно внутри UpdateEvent и подвешивали симуляцию.
         /// </summary>
-        private void QueueGameSync()
+        private void QueueGameSync(bool forceFull = false)
         {
             if (!_isPlaying || IsSimulation || BattleManager?.GameServer == null)
                 return;
 
             Interlocked.Exchange(ref _gameSyncPending, 1);
+            if (forceFull)
+                _syncCache.Reset();
+
             if (Interlocked.CompareExchange(ref _gameSyncInFlight, 1, 0) != 0)
                 return;
 
-            PumpGameSync();
+            PumpGameSync(forceFull);
         }
 
-        private void PumpGameSync()
+        private void PumpGameSync(bool forceFull = false)
         {
             Interlocked.Exchange(ref _gameSyncPending, 0);
 
             NetWorkDto.NGame nGame;
             try
             {
-                nGame = GameAdapter.Get(this);
+                nGame = GameAdapter.Get(this, _syncCache, forceFull);
             }
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "Game {GameId}: ошибка сборки снапшота", Id);
+                Interlocked.Exchange(ref _gameSyncInFlight, 0);
+                return;
+            }
+
+            if (nGame.IsDelta
+                && (nGame.Units == null || nGame.Units.Count == 0)
+                && (nGame.Constructions == null || nGame.Constructions.Count == 0)
+                && (nGame.Missiles == null || nGame.Missiles.Count == 0)
+                && (nGame.RemovedUnitIds == null || nGame.RemovedUnitIds.Length == 0)
+                && (nGame.RemovedConstructionIds == null || nGame.RemovedConstructionIds.Length == 0)
+                && (nGame.RemovedMissileIds == null || nGame.RemovedMissileIds.Length == 0))
+            {
                 Interlocked.Exchange(ref _gameSyncInFlight, 0);
                 return;
             }
@@ -217,7 +240,12 @@ namespace RtsServer.App.Battle
                 {
                     MainResponse response = new MainResponse("battle", "/gameBattle/setGame/", "", "200")
                         .SetBody(nGame);
-                    return Encoding.UTF8.GetBytes(JsonSerializer.Serialize(response) + "\n");
+                    // Один UTF-8 буфер вместо string + GetBytes (меньше GC).
+                    byte[] json = JsonSerializer.SerializeToUtf8Bytes(response);
+                    byte[] withNl = new byte[json.Length + 1];
+                    Buffer.BlockCopy(json, 0, withNl, 0, json.Length);
+                    withNl[^1] = (byte)'\n';
+                    return withNl;
                 }).ConfigureAwait(false);
 
                 if (!_isPlaying || BattleManager?.GameServer == null)
@@ -289,9 +317,12 @@ namespace RtsServer.App.Battle
             ClearUnits();
             ClearMissile();
             ClearConstructions();
+            _fog.Rebuild(this);
 
             foreach (Unit unit in Units)
                 unit.Update();
+
+            UnitSeparation.Resolve(this);
 
             foreach (Missile missile in Missiles)
                 missile.Update();
@@ -344,6 +375,7 @@ namespace RtsServer.App.Battle
             UpdateEvent?.Invoke();
 
             RecalcPower();
+            _fog.Rebuild(this);
 
             double dt = TimeSystem.GetDelta();
             foreach (Player player in Players)
@@ -356,6 +388,8 @@ namespace RtsServer.App.Battle
             {
                 unit.Update();
             }
+
+            UnitSeparation.Resolve(this);
 
             foreach (Missile missile in Missiles)
             {
@@ -370,19 +404,16 @@ namespace RtsServer.App.Battle
             CheckVictoryCondition();
 
             // Не ждём сеть в игровом цикле — иначе при забитом TCP симуляция тормозит вместе с отправкой.
-            SendPlayersStatsAsync();
+            // Стейт игрока (ресурсы/энергия) не нужно слать 20 Гц — хватает ~4 Гц.
+            _playerStatsCooldown -= TimeSystem.GetDelta();
+            if (_playerStatsCooldown <= 0)
+            {
+                _playerStatsCooldown = 0.25;
+                SendPlayersStatsAsync();
+            }
 
-            // Снимок после симуляции тика, не чаще ~10 Гц — иначе JSON блокирует/грузит цикл.
-            _ticksSinceGameSync++;
-            if (_ticksSinceGameSync >= 2)
-            {
-                _ticksSinceGameSync = 0;
-                QueueGameSync();
-            }
-            else if (Volatile.Read(ref _gameSyncPending) == 1 && Volatile.Read(ref _gameSyncInFlight) == 0)
-            {
-                QueueGameSync();
-            }
+            // Дельты лёгкие — синк каждый тик (~20 Гц); полный снимок раз в ~5 с внутри cache.
+            QueueGameSync();
         }
 
         private bool HasLivingBuildings(int playerId) =>
@@ -398,18 +429,34 @@ namespace RtsServer.App.Battle
             if (!_isPlaying || Players.Count < 2)
                 return;
 
+            double dt = TimeSystem.GetDelta();
+            _matchAgeSeconds += dt;
+
+            foreach (Player p in Players)
+            {
+                if (HasLivingBuildings(p.Id))
+                    _playersEverHadBuildings.Add(p.Id);
+            }
+
             if (_victoryHandled)
             {
                 if (_victoryEndTimer < 0)
                     return;
-                _victoryEndTimer -= TimeSystem.GetDelta();
+                _victoryEndTimer -= dt;
                 if (_victoryEndTimer <= 0)
                 {
                     _victoryEndTimer = -1;
+                    // 5 с симуляции после победы — теперь шлём результат и выходим.
+                    BroadcastMatchResult(_victoryWinnerId);
                     _ = EndAsync();
                 }
                 return;
             }
+
+            // Старт матча / доезд сцены: нечего решать, пока не увидели базы хотя бы у двоих
+            // и не прошло чуть времени (иначе пустая карта → мгновенный endGame/Defeat).
+            if (_matchAgeSeconds < 2.0 || _playersEverHadBuildings.Count < 2)
+                return;
 
             List<Player> withBuildings = Players.Where(p => HasLivingBuildings(p.Id)).ToList();
             if (withBuildings.Count == 1)
@@ -427,9 +474,9 @@ namespace RtsServer.App.Battle
             _victoryHandled = true;
             _victoryWinnerId = winnerPlayerId;
             _victoryEndTimer = 5.0;
-            BroadcastMatchResult(winnerPlayerId);
+            // Результат и XP шлём после 5 с досимуляции — клиент смотрит бой, потом окно.
             _logger.LogInformation(
-                "Game {GameId} victory: winner={WinnerId}, end in 5s",
+                "Game {GameId} victory: winner={WinnerId}, simulate 5s then end",
                 Id, winnerPlayerId);
         }
 
@@ -439,33 +486,93 @@ namespace RtsServer.App.Battle
                 return;
 
             _endResultSent = true;
+            float matchDuration = (float)_matchAgeSeconds;
+
             foreach (Player player in Players)
             {
                 if (player.IsBot)
-                    continue;
-
-                var userTcp = BattleManager.GameServer.TcpServer.GetClientByUserAuth(player.UserAuth);
-                if (userTcp == null || !userTcp.IsConnected())
                     continue;
 
                 string result = winnerPlayerId < 0
                     ? "Draw"
                     : (player.Id == winnerPlayerId ? "Victory" : "Defeat");
 
+                int xpGain = 0;
                 try
                 {
-                    // CancellationToken.None — пакет победы не должен сорваться при Cancel().
+                    xpGain = ApplyBattleExperience(player, result);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to award XP to player {PlayerId}", player.Id);
+                }
+
+                var userTcp = BattleManager.GameServer.TcpServer.GetClientByUserAuth(player.UserAuth);
+                if (userTcp == null || !userTcp.IsConnected())
+                    continue;
+
+                try
+                {
                     new EndGameSender(userTcp)
-                        .SetDate(new EndGameResult(result, winnerPlayerId))
+                        .SetDate(new EndGameResult(result, winnerPlayerId, matchDuration, xpGain))
                         .SendAsync(CancellationToken.None)
                         .GetAwaiter()
                         .GetResult();
+
+                    if (player.UserAuth != null)
+                    {
+                        new CurUserDataSender(userTcp)
+                            .SetDate(UserAdapter.Get(player.UserAuth))
+                            .SendAsync(CancellationToken.None)
+                            .GetAwaiter()
+                            .GetResult();
+                    }
                 }
                 catch (Exception ex)
                 {
                     _logger.LogWarning(ex, "Failed to send match result to player {PlayerId}", player.Id);
                 }
             }
+        }
+
+        private int ApplyBattleExperience(Player player, string result)
+        {
+            UserAuth? user = player.UserAuth;
+            if (user == null)
+                return 0;
+
+            int xpGain = PlayerProgression.XpForResult(result);
+            int levelBefore = PlayerProgression.NormalizeLevel(user.Level);
+            PlayerProgression.AddExperience(user, xpGain);
+
+            BattleManager?.GameServer?.DbUsers.Add(user);
+
+            try
+            {
+                using ApplicationContext db = new();
+                UserAuth? dbUser = db.Users.FirstOrDefault(u => u.Id == user.Id);
+                if (dbUser != null)
+                {
+                    dbUser.Experience = user.Experience;
+                    dbUser.Level = user.Level;
+                    db.SaveChanges();
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to persist XP for user {UserId}", user.Id);
+            }
+
+            _logger.LogInformation(
+                "XP +{Xp} ({Result}) user={User} L{From}→L{To} exp={Exp}/{Need}",
+                xpGain,
+                result,
+                user.UserName,
+                levelBefore,
+                user.Level,
+                user.Experience,
+                PlayerProgression.XpRequiredForNextLevel(user.Level));
+            return xpGain;
         }
 
         private void ClearConstructions()

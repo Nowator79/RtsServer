@@ -7,10 +7,10 @@ namespace RtsServer.App.Battle.Navigator
     /// </summary>
     public sealed class PathReservationMap
     {
-        public const int Capacity = 3;
-        public const int Penalty = 3;
-        public const int OverCapacityPenalty = 6;
-        public const int TrimEnds = 2;
+        public const int Capacity = 2;
+        public const int Penalty = 5;
+        public const int OverCapacityPenalty = 10;
+        public const int TrimEnds = 1;
 
         private readonly Dictionary<Vector2Int, int> _counts = new();
 

@@ -1,33 +1,37 @@
-﻿using RtsServer.App.Battle;
+using RtsServer.App.Battle;
 using RtsServer.App.NetWorkDto;
 
 namespace RtsServer.App.Adapters
 {
     public static class GameAdapter
     {
-        public static NGame Get(Game game)
+        public static NGame Get(Game game) => Get(game, syncCache: null, forceFull: true);
+
+        public static NGame Get(Game game, GameSyncCache? syncCache, bool forceFull = false)
         {
-            List<NUser> NUsers = new();
-            List<NUnit> NUnits = new();
-            List<NConstruction> NConstructions = new();
-            List<NMissile> NMissiles = new();
+            if (syncCache != null)
+                return syncCache.Build(game, forceFull);
+
+            List<NUnit> nUnits = new();
+            List<NConstruction> nConstructions = new();
+            List<NMissile> nMissiles = new();
 
             foreach (Battle.Units.Unit unit in game.Units)
-            {
-                NUnits.Add(UnitAdapter.Get(unit));
-            }
+                nUnits.Add(UnitAdapter.Get(unit));
 
             foreach (Battle.Constructions.Construction construction in game.Constructions)
-            {
-                NConstructions.Add(ConstructionAdapter.Get(construction));
-            }
+                nConstructions.Add(ConstructionAdapter.Get(construction));
 
             foreach (Battle.Units.Missile missile in game.Missiles)
-            {
-                NMissiles.Add(MissileAdapter.Get(missile));
-            }
+                nMissiles.Add(MissileAdapter.Get(missile));
 
-            return new NGame(NUnits, NConstructions, NMissiles);
+            return new NGame(nUnits, nConstructions, nMissiles)
+            {
+                IsDelta = false,
+                RemovedUnitIds = Array.Empty<int>(),
+                RemovedConstructionIds = Array.Empty<int>(),
+                RemovedMissileIds = Array.Empty<int>()
+            };
         }
     }
 }

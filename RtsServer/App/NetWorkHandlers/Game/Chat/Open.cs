@@ -1,4 +1,4 @@
-﻿using RtsServer.App.Battle.Chat;
+using RtsServer.App.Battle.Chat;
 using RtsServer.App.DataBase.Dto;
 using RtsServer.App.NetWork.Tcp;
 using RtsServer.App.NetWorkDto;
@@ -20,7 +20,7 @@ namespace RtsServer.App.NetWorkHandlers.Game.Chat
             List<UserAuth> usersAuth = context.GetAuthenticatedUsers();
             usersAuth.ForEach((user) =>
             {
-                NUsers.Add(new NUser(user.Id, user.UserName, user.Level, user.Experience));
+                NUsers.Add(Adapters.UserAdapter.GetPublic(user));
             });
 
             List<Message> messages = context.ChatSystem.GetChat();

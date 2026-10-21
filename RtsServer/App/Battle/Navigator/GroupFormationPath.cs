@@ -23,6 +23,10 @@ namespace RtsServer.App.Battle.Navigator
             if (ground == null || ground.Count < 2 || map == null)
                 return false;
 
+            // Общий spine стартует внутри толпы и сразу упирается в стоячих.
+            // Пока это не чинится отдельно, групповой путь собирает GroupMoveAssigner.
+            return false;
+
             Vector2Float center = ComputeSmartCenter(ground, out _);
             Vector2Int start = NavHelper.FindNearestWalkable(map, game, center.ToInt());
             Vector2Int end = NavHelper.FindNearestWalkable(map, game, click);
@@ -36,34 +40,33 @@ namespace RtsServer.App.Battle.Navigator
             if (spine.Count == 0)
                 return false;
 
-            GetTravelAxis(start, end, out _, out _, out double perpX, out double perpY);
+            GetTravelAxis(start, end, out double fwdX, out double fwdY, out double perpX, out double perpY);
 
             List<Vector2Int> slots = BuildSlotsAround(click, ground.Count, map, game);
             if (slots.Count == 0)
                 return false;
 
-            HashSet<int> takenSlot = new();
+            double Along(double x, double y) => (x - center.X) * fwdX + (y - center.Y) * fwdY;
+
+            // Ближний к цели идёт в дальний слот и проходит вход первым.
+            // Задний получает слот у входа и встаёт туда последним.
             List<Unit> order = ground
-                .OrderBy(u => Dist2(u.Position, click))
+                .OrderByDescending(u => Along(u.Position.X, u.Position.Y))
                 .ThenBy(u => u.Id)
+                .ToList();
+            List<Vector2Int> slotOrder = slots
+                .OrderByDescending(s => Along(s.X, s.Y))
+                .ThenBy(s => Chebyshev(s, end))
                 .ToList();
 
             int assigned = 0;
-            foreach (Unit unit in order)
+            for (int i = 0; i < order.Count; i++)
             {
-                int slotIndex = PickNearestSlot(unit, slots, takenSlot);
-                Vector2Int dest = slotIndex < 0 ? end : slots[slotIndex];
-                if (slotIndex >= 0)
-                    takenSlot.Add(slotIndex);
-
-                double dx = unit.Position.X - center.X;
-                double dy = unit.Position.Y - center.Y;
-                int lane = (int)Math.Round(dx * perpX + dy * perpY);
-                if (lane > MaxLane) lane = MaxLane;
-                if (lane < -MaxLane) lane = -MaxLane;
+                Unit unit = order[i];
+                Vector2Int dest = i < slotOrder.Count ? slotOrder[i] : end;
 
                 List<Vector2Int> personal = BuildLanePath(
-                    spine, lane, unit.Position.ToInt(), dest, map, game);
+                    spine, 0, unit.GetPathStartCell(), dest, map, game);
 
                 if (personal.Count == 0)
                     continue;
@@ -90,7 +93,7 @@ namespace RtsServer.App.Battle.Navigator
                 int ox = (int)Math.Round(px * lane);
                 int oy = (int)Math.Round(py * lane);
                 Vector2Int candidate = new(spine[i].X + ox, spine[i].Y + oy);
-                if (!NavHelper.IsTerrainWalkable(map, game, candidate))
+                if (!LaneStepOk(map, game, spine[i], candidate))
                     candidate = spine[i];
                 if (lanePath.Count == 0 || !lanePath[^1].Equals(candidate))
                     lanePath.Add(candidate);
@@ -117,20 +120,31 @@ namespace RtsServer.App.Battle.Navigator
 
             if (Chebyshev(prev, next) > 1)
             {
-                foreach (Vector2Int step in TraceLine(prev, next))
+                using var nav = new NavWave(map, prev, next, ignoreParkedUnits: true);
+                nav.Run();
+                if (!nav.IsFail)
                 {
-                    if (path[^1].Equals(step))
-                        continue;
-                    Vector2Int cell = step;
-                    if (!NavHelper.IsTerrainWalkable(map, game, cell) && !cell.Equals(next))
-                        cell = NavHelper.FindNearestWalkable(map, game, cell, 2);
-                    if (!path[^1].Equals(cell))
-                        path.Add(cell);
+                    foreach (Vector2Int step in nav.GetRoutePath())
+                    {
+                        if (!path[^1].Equals(step))
+                            path.Add(step);
+                    }
+                    return;
                 }
             }
 
-            if (!path[^1].Equals(next))
+            if (!path[^1].Equals(next) && NavHelper.IsTerrainWalkable(map, game, next))
                 path.Add(next);
+        }
+
+        private static bool LaneStepOk(Map map, Game? game, Vector2Int spine, Vector2Int candidate)
+        {
+            if (!NavHelper.IsTerrainWalkable(map, game, candidate))
+                return false;
+            var tiles = map.GetArrayMap();
+            if (!NavHelper.CanStepHeight(tiles[spine.X, spine.Y].Height, tiles[candidate.X, candidate.Y].Height))
+                return false;
+            return true;
         }
 
         private static IEnumerable<Vector2Int> TraceLine(Vector2Int from, Vector2Int to)
@@ -188,7 +202,7 @@ namespace RtsServer.App.Battle.Navigator
             if (start.Equals(end))
                 return new List<Vector2Int> { start };
 
-            using NavWave nav = new(map, start, end, probe);
+            using NavWave nav = new(map, start, end, probe, ignoreParkedUnits: true);
             nav.Run();
             if (nav.IsFail) return null;
             Queue<Vector2Int> q = nav.GetRoutePath();
@@ -289,6 +303,7 @@ namespace RtsServer.App.Battle.Navigator
                 if (result.Count >= count) return;
                 if (!seen.Add(cell)) return;
                 if (!NavHelper.IsTerrainWalkable(map, game, cell)) return;
+                if (IsOccupiedByParked(cell, map)) return;
                 result.Add(cell);
             }
 
@@ -319,6 +334,20 @@ namespace RtsServer.App.Battle.Navigator
                 if (d < bestDist) { bestDist = d; best = i; }
             }
             return best;
+        }
+
+        private static bool IsOccupiedByParked(Vector2Int cell, Map map)
+        {
+            var chunk = map.GetArrayMap()[cell.X, cell.Y];
+            if (chunk?.UnitsInPoint == null) return false;
+            foreach (Unit other in chunk.UnitsInPoint)
+            {
+                if (other == null || other.IsDestroyed || !other.OccupiesGroundCell)
+                    continue;
+                if (other.IsParked)
+                    return true;
+            }
+            return false;
         }
 
         private static int Dist2(Vector2Float pos, Vector2Int cell)

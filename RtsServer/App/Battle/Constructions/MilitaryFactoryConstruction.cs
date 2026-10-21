@@ -5,7 +5,7 @@ using RtsServer.App.Battle.Units;
 
 namespace RtsServer.App.Battle.Constructions
 {
-    /// <summary>Военный завод — техника: Baggy / TankT1 / TankAa (пехота — в Barracks).</summary>
+    /// <summary>Военный завод — техника: Baggy / TankT1 / TankAa / TankArtillery (пехота — в Barracks).</summary>
     public class MilitaryFactoryConstruction : Construction, IEnergyConsumer, IUnitFactory
     {
         public const int sizeX = 3;
@@ -27,10 +27,17 @@ namespace RtsServer.App.Battle.Constructions
         /// <summary>Очередь после текущего (не включая текущий).</summary>
         public IReadOnlyCollection<string> ProductionQueue => _queue;
 
+        /// <summary>CSV очереди (кэш, без Join на каждый тик синка).</summary>
+        public string ProductionQueueCsv => _queueCsv;
+
+        public int OrdersCount =>
+            (_currentUnitCode != null ? 1 : 0) + _queue.Count;
+
         private string? _currentUnitCode;
         private float _productionProgress;
         private float _productionDuration = 1f;
         private readonly Queue<string> _queue = new();
+        private string _queueCsv = "";
 
         public MilitaryFactoryConstruction(Vector2Int position, int playerOwner)
             : base(maxHealth, maxHealth, position, new(sizeX, sizeY), Code, playerOwner) { }
@@ -51,6 +58,10 @@ namespace RtsServer.App.Battle.Constructions
                     cost = 180;
                     buildSeconds = 10f;
                     return true;
+                case "TankArtillery":
+                    cost = 220;
+                    buildSeconds = 12f;
+                    return true;
                 default:
                     cost = 0;
                     buildSeconds = 0f;
@@ -67,6 +78,7 @@ namespace RtsServer.App.Battle.Constructions
         public bool Enqueue(string unitCode, float buildSeconds)
         {
             if (!IsBuilt || !CanProduce(unitCode)) return false;
+            if (OrdersCount >= UnitProductionLimits.MaxOrders) return false;
 
             if (_currentUnitCode == null)
             {
@@ -77,9 +89,21 @@ namespace RtsServer.App.Battle.Constructions
             else
             {
                 _queue.Enqueue(unitCode);
+                RebuildQueueCsv();
             }
 
             return true;
+        }
+
+        private void RebuildQueueCsv()
+        {
+            if (_queue.Count == 0)
+            {
+                _queueCsv = "";
+                return;
+            }
+
+            _queueCsv = string.Join(",", _queue);
         }
 
         public override void Update()
@@ -99,6 +123,7 @@ namespace RtsServer.App.Battle.Constructions
             if (_queue.Count == 0) return;
 
             string next = _queue.Dequeue();
+            RebuildQueueCsv();
             if (!TryGetUnitRecipe(next, out _, out float seconds))
                 return;
 

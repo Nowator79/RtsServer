@@ -1,6 +1,7 @@
 using RtsServer.App.Battle.Constructions;
 using RtsServer.App.Battle.Dto;
 using RtsServer.App.Battle.MapBattle;
+using RtsServer.App.Battle.MapBattle.ChunksType;
 
 namespace RtsServer.App.Battle.Navigator
 {
@@ -20,7 +21,36 @@ namespace RtsServer.App.Battle.Navigator
         private static bool IsBlockedByConstructionList(IEnumerable<Construction>? list, int x, int y)
         {
             if (list == null) return false;
-            foreach (Construction c in list)
+
+            // Сетевой поток / тик могут менять Constructions во время pathfind —
+            // foreach по List кидает InvalidOperationException.
+            if (list is List<Construction> concrete)
+            {
+                int n = concrete.Count;
+                for (int i = 0; i < n; i++)
+                {
+                    if ((uint)i >= (uint)concrete.Count)
+                        break;
+                    Construction? c = concrete[i];
+                    if (c != null && c.OccupiesCell(x, y))
+                        return true;
+                }
+                return false;
+            }
+
+            if (list is HashSet<Construction> set)
+            {
+                if (set.Count == 0)
+                    return false;
+                foreach (Construction c in set.ToArray())
+                {
+                    if (c != null && c.OccupiesCell(x, y))
+                        return true;
+                }
+                return false;
+            }
+
+            foreach (Construction c in list.ToArray())
             {
                 if (c != null && c.OccupiesCell(x, y))
                     return true;
@@ -39,10 +69,72 @@ namespace RtsServer.App.Battle.Navigator
                 return false;
 
             var chunk = map.GetArrayMap()[x, y];
-            if (chunk == null || chunk.Height != 1 || chunk.Id == 0)
+            if (!IsWalkableHeight(chunk))
                 return false;
 
             return !IsBlockedByConstruction(game, x, y);
+        }
+
+        /// <summary>Земля/плато (не вода). Высоты 1–3 проходимы.</summary>
+        public static bool IsWalkableHeight(ChunkBase? chunk) =>
+            chunk != null && chunk.Id != 0 && chunk.Height >= 1;
+
+        /// <summary>Шаг между соседними клетками: разница высот не больше 1.</summary>
+        public static bool CanStepHeight(int fromHeight, int toHeight) =>
+            Math.Abs(fromHeight - toHeight) <= 1;
+
+        /// <summary>Индекс клетки, чей центр — целое (квадрат [i-0.5, i+0.5]).</summary>
+        public static int CenteredCell(double v) => (int)Math.Floor(v + 0.5);
+
+        /// <summary>
+        /// Круг проник в клетку. Касание границы не считается: иначе техника встаёт на углу.
+        /// </summary>
+        public static bool CirclePenetratesCell(double cx, double cy, double radius, int cellX, int cellY)
+        {
+            if (radius <= 0)
+                return false;
+
+            double nearestX = Math.Clamp(cx, cellX - 0.5, cellX + 0.5);
+            double nearestY = Math.Clamp(cy, cellY - 0.5, cellY + 0.5);
+            double dx = cx - nearestX;
+            double dy = cy - nearestY;
+            return dx * dx + dy * dy < radius * radius - 1e-8;
+        }
+
+        /// <summary>Круг задевает воду, обрыв относительно standHeight или постройку.</summary>
+        public static bool CircleHitsBlocked(Map map, Game? game, double cx, double cy, double radius, int standHeight)
+        {
+            if (map == null || radius <= 0)
+                return false;
+
+            var tiles = map.GetArrayMap();
+            int width = tiles.GetLength(0);
+            int length = tiles.GetLength(1);
+            int x0 = CenteredCell(cx - radius);
+            int x1 = CenteredCell(cx + radius - 1e-9);
+            int y0 = CenteredCell(cy - radius);
+            int y1 = CenteredCell(cy + radius - 1e-9);
+
+            for (int x = x0; x <= x1; x++)
+            {
+                for (int y = y0; y <= y1; y++)
+                {
+                    if (!CirclePenetratesCell(cx, cy, radius, x, y))
+                        continue;
+                    if (x < 0 || y < 0 || x >= width || y >= length)
+                        return true;
+
+                    var tile = tiles[x, y];
+                    if (!IsWalkableHeight(tile))
+                        return true;
+                    if (!CanStepHeight(standHeight, tile.Height))
+                        return true;
+                    if (IsBlockedByConstruction(game, x, y))
+                        return true;
+                }
+            }
+
+            return false;
         }
 
         public static bool IsTerrainWalkable(Map map, Game? game, Vector2Int cell) =>
@@ -171,7 +263,7 @@ namespace RtsServer.App.Battle.Navigator
         // условия передвижения на чанк для навигатора
         public static bool CanMove(NavChunk start, NavChunk end)
         {
-            return end.Height == 1;
+            return end.Height >= 1 && CanStepHeight(start.Height, end.Height);
         }
     }
 }
