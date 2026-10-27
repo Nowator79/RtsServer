@@ -15,6 +15,10 @@ namespace RtsServer.App.NetWorkDto
         public NAttackPoint[] AttackPoints { get; set; }
         public NUnitInfo Info { get; set; }
         public int OwnerId { get; set; }
+        /// <summary>Вертолёт в режиме низкого полёта.</summary>
+        public bool IsLowFlight { get; set; }
+        /// <summary>0..1 топливо самолёта. У остальных 1.</summary>
+        public float Fuel01 { get; set; }
 
         public NUnit(int Id, string Code, float Health, Vector2Float Position, double Rotation, int OwnerId)
         {
@@ -26,6 +30,8 @@ namespace RtsServer.App.NetWorkDto
             this.Position = Position;
             this.Rotation = Rotation;
             this.OwnerId = OwnerId;
+            this.IsLowFlight = false;
+            this.Fuel01 = 1f;
         }
 
 

@@ -1,4 +1,4 @@
-﻿using RtsServer.App.Battle.Dto;
+using RtsServer.App.Battle.Dto;
 using RtsServer.App.Battle.MapBattle.ChunksType;
 
 namespace RtsServer.App.Battle.MapBattle
@@ -7,6 +7,8 @@ namespace RtsServer.App.Battle.MapBattle
     {
         public List<ChunkBase> Chunks { get; private set; }
         public ChunkBase[,] ChunksProcessed { get; private set; }
+        public OreDepositMap Ore { get; } = new();
+        public TreeCoverMap Trees { get; } = new();
 
         public int Width { get; private set; }
         public int Length { get; private set; }

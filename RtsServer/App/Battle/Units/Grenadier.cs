@@ -9,6 +9,7 @@ namespace RtsServer.App.Battle.Units
     {
         public override ArmorType Armor => ArmorType.Light;
         public override double CollisionRadius => 0.1;
+        public override bool CanTraverseForest => true;
 
         public Grenadier(Vector2Float position, int playerOwner)
             : base("Grenadier", 450, 450, position, playerOwner)

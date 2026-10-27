@@ -6,5 +6,7 @@ namespace RtsServer.App.Battle.Interfaces
         bool CanProduce(string unitCode);
         bool Enqueue(string unitCode, float buildSeconds);
         bool TryGetRecipe(string unitCode, out int cost, out float buildSeconds);
+        /// <summary>Убрать один заказ unitCode (из очереди или текущий) и вернуть true при успехе.</summary>
+        bool TryCancelOne(string unitCode);
     }
 }

@@ -108,7 +108,7 @@ namespace RtsServer.App.Battle.Units
             _armorDamage = armorDamage ?? ArmorDamageProfile.Zero;
             _homingDurationSeconds = homingDurationSeconds is > 0
                 ? homingDurationSeconds.Value
-                : DefaultHomingDurationSeconds;
+                : DefaultHomingDurationSeconds * Ballistics.FlightSlowdown;
             _loftDurationSeconds = loftDurationSeconds > 0 ? loftDurationSeconds : 0;
             // Рой: старт чуть вверх с наклоном к точке удара (не отвесная ракета).
             Velocity = _vlsBallistic
@@ -252,7 +252,7 @@ namespace RtsServer.App.Battle.Units
             // Низкая дуга в фиксированную точку — без перелётов на близкой дистанции.
             if (_vlsArcVelocity == null)
             {
-                double muzzle = Math.Max(Speed, 8f);
+                double muzzle = Math.Max(Speed, Ballistics.ScaleSpeed(8f));
                 if (!Ballistics.TryComputeLaunchVelocity(
                         Position,
                         Height,

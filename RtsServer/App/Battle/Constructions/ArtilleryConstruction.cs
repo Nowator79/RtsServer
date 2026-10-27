@@ -1,6 +1,7 @@
 using RtsServer.App.Battle.Dto;
 using RtsServer.App.Battle.Interfaces;
 using RtsServer.App.Battle.MapBattle;
+using RtsServer.App.Battle.Tools;
 using RtsServer.App.Battle.Units;
 
 namespace RtsServer.App.Battle.Constructions
@@ -111,14 +112,16 @@ namespace RtsServer.App.Battle.Constructions
             Vector2Float aim = ApplySpread(target.AimPosition, SpreadRadius);
             double fromHeight = GetGroundElevation() + MuzzleHeight;
             double toHeight = TerrainHeights.SampleAt(Game, aim) + 0.05;
+            float speed = Ballistics.ScaleSpeed(MissileSpeed);
+            double loft = Ballistics.ScaleDuration(LoftDuration);
             Vector3Float toAim = new(
                 aim.X - from.X,
                 aim.Y - from.Y,
                 toHeight - fromHeight);
             double mag = toAim.Magnitude();
             Vector3Float velocity = mag > 1e-6
-                ? toAim.Normalized() * MissileSpeed
-                : new Vector3Float(0, 0, MissileSpeed);
+                ? toAim.Normalized() * speed
+                : new Vector3Float(0, 0, speed);
 
             Missile missile = new(
                 "artillery_rocket",
@@ -127,7 +130,7 @@ namespace RtsServer.App.Battle.Constructions
                 velocity,
                 aim,
                 toHeight,
-                MissileSpeed,
+                speed,
                 ExplosionRange,
                 ArmorDamage.VsHeavy,
                 Game!.TimeSystem,
@@ -139,7 +142,7 @@ namespace RtsServer.App.Battle.Constructions
                 shooterUnitId: null,
                 applyGravity: false,
                 armorDamage: ArmorDamage,
-                loftDurationSeconds: LoftDuration,
+                loftDurationSeconds: loft,
                 sharpDivertAfterLoft: true);
 
             Game.AddMissile(missile);

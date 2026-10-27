@@ -10,6 +10,8 @@ namespace RtsServer.App.DataBase
     {
         public const int XpWin = 500;
         public const int XpLoss = 100;
+        /// <summary>Серебро (Credits) за победу.</summary>
+        public const int CreditsWin = 5000;
         public const int BaseXpToLevel2 = 2000;
         private const int MaxLevel = 30;
 
@@ -34,6 +36,13 @@ namespace RtsServer.App.DataBase
             return string.Equals(result, "Victory", StringComparison.OrdinalIgnoreCase)
                 ? XpWin
                 : XpLoss;
+        }
+
+        public static int CreditsForResult(string result)
+        {
+            return string.Equals(result, "Victory", StringComparison.OrdinalIgnoreCase)
+                ? CreditsWin
+                : 0;
         }
 
         /// <summary>Добавляет опыт и пересчитывает Level. Experience — прогресс внутри текущего уровня.</summary>

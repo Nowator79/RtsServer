@@ -10,10 +10,15 @@ namespace RtsServer.App.Battle.Navigator
     /// </summary>
     public static class PathSmoother
     {
-        public static List<Vector2Int> Smooth(IReadOnlyList<Vector2Int> path, Map map, Game? game)
+        public static List<Vector2Int> Smooth(
+            IReadOnlyList<Vector2Int> path, Map map, Game? game,
+            bool ignoreObstacles = false, bool canTraverseForest = false)
         {
             if (path == null || path.Count <= 2)
                 return path?.ToList() ?? new List<Vector2Int>();
+
+            if (ignoreObstacles)
+                return path.ToList();
 
             List<Vector2Int> result = new() { path[0] };
             int i = 0;
@@ -22,7 +27,7 @@ namespace RtsServer.App.Battle.Navigator
                 int best = i + 1;
                 for (int j = path.Count - 1; j > i + 1; j--)
                 {
-                    if (HasLineOfSight(path[i], path[j], map, game))
+                    if (HasLineOfSight(path[i], path[j], map, game, canTraverseForest))
                     {
                         best = j;
                         break;
@@ -40,12 +45,13 @@ namespace RtsServer.App.Battle.Navigator
         private const double PathClearance = 0.25;
 
         /// <summary>Все клетки суперкавера линии проходимы, и корпус не задевает угол.</summary>
-        public static bool HasLineOfSight(Vector2Int from, Vector2Int to, Map map, Game? game)
+        public static bool HasLineOfSight(
+            Vector2Int from, Vector2Int to, Map map, Game? game, bool canTraverseForest = false)
         {
             int prevHeight = map.GetArrayMap()[from.X, from.Y].Height;
             foreach (Vector2Int cell in SupercoverLine(from, to))
             {
-                if (!NavHelper.IsTerrainWalkable(map, game, cell))
+                if (!NavHelper.IsTerrainWalkable(map, game, cell, canTraverseForest))
                     return false;
                 int height = map.GetArrayMap()[cell.X, cell.Y].Height;
                 if (!NavHelper.CanStepHeight(prevHeight, height))
@@ -53,11 +59,12 @@ namespace RtsServer.App.Battle.Navigator
                 prevHeight = height;
             }
 
-            return SegmentClearsBody(from, to, map, game);
+            return SegmentClearsBody(from, to, map, game, canTraverseForest);
         }
 
         /// <summary>Точки отрезка между центрами клеток не проникают в блок кругом техники.</summary>
-        private static bool SegmentClearsBody(Vector2Int from, Vector2Int to, Map map, Game? game)
+        private static bool SegmentClearsBody(
+            Vector2Int from, Vector2Int to, Map map, Game? game, bool canTraverseForest)
         {
             var tiles = map.GetArrayMap();
             int width = tiles.GetLength(0);
@@ -76,7 +83,9 @@ namespace RtsServer.App.Battle.Navigator
                 if (cx < 0 || cy < 0 || cx >= width || cy >= length || tiles[cx, cy] == null)
                     return false;
                 int height = tiles[cx, cy].Height;
-                if (NavHelper.CircleHitsBlocked(map, game, x, y, PathClearance, height))
+                if (NavHelper.CircleHitsBlocked(
+                        map, game, x, y, PathClearance, height,
+                        forestBlocks: !canTraverseForest))
                     return false;
             }
 

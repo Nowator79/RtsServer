@@ -15,7 +15,7 @@ namespace RtsServer.App.Battle.Units.AttackingPoint
             Range = 40;
             fireCooldown = 0.28;
             AllowedTargetDomains = AttackTargetDomain.Ground | AttackTargetDomain.Construction;
-            ArmorDamage = new ArmorDamageProfile(vsLight: 98f, vsMedium: 238f, vsHeavy: 308f);
+            ArmorDamage = new ArmorDamageProfile(vsLight: 98f, vsMedium: 714f, vsHeavy: 924f);
             Damage = ArmorDamage.VsHeavy;
         }
 

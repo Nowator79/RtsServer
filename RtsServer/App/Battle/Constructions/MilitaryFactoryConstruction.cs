@@ -6,7 +6,7 @@ using RtsServer.App.Battle.Units;
 namespace RtsServer.App.Battle.Constructions
 {
     /// <summary>Военный завод — техника: Baggy / TankT1 / TankAa / TankArtillery (пехота — в Barracks).</summary>
-    public class MilitaryFactoryConstruction : Construction, IEnergyConsumer, IUnitFactory
+    public class MilitaryFactoryConstruction : Construction, IEnergyConsumer, IUnitProductionHost
     {
         public const int sizeX = 3;
         public const int sizeY = 3;
@@ -62,6 +62,10 @@ namespace RtsServer.App.Battle.Constructions
                     cost = 220;
                     buildSeconds = 12f;
                     return true;
+                case "MobileConstructionCenter":
+                    cost = 200;
+                    buildSeconds = 20f;
+                    return true;
                 default:
                     cost = 0;
                     buildSeconds = 0f;
@@ -94,6 +98,16 @@ namespace RtsServer.App.Battle.Constructions
 
             return true;
         }
+
+        public bool TryCancelOne(string unitCode) =>
+            UnitProductionQueueOps.TryCancelOne(
+                ref _currentUnitCode,
+                ref _productionProgress,
+                ref _productionDuration,
+                _queue,
+                RebuildQueueCsv,
+                code => TryGetUnitRecipe(code, out _, out float seconds) ? (true, seconds) : (false, 0f),
+                unitCode);
 
         private void RebuildQueueCsv()
         {

@@ -20,6 +20,17 @@ namespace RtsServer.App.Battle.Units
         /// <summary>Занимает клетку для наземной навигации (самолёты — нет).</summary>
         public virtual bool OccupiesGroundCell => true;
 
+        /// <summary>
+        /// Летает над постройками/рельефом: A* не учитывает здания и перепады высоты.
+        /// </summary>
+        public virtual bool FliesOverObstacles => false;
+
+        /// <summary>Ходит только по воде (Id==0). Взаимоисключающе с землёй.</summary>
+        public virtual bool MovesOnWater => false;
+
+        /// <summary>Пехота проходит лес; техника — нет. Воздух игнорирует через FliesOverObstacles.</summary>
+        public virtual bool CanTraverseForest => false;
+
         /// <summary>Радиус круглой коллизии. Техника: диаметр 0.5. Пехота переопределяет радиус на 0.1.</summary>
         public virtual double CollisionRadius => OccupiesGroundCell ? 0.25 : 0;
 
@@ -225,7 +236,11 @@ namespace RtsServer.App.Battle.Units
                 cells.Add(destination);
             cells = GridPathUtil.EnsureAdjacent(cells);
             if (Game?.Map != null)
-                cells = PathSmoother.Smooth(cells, Game.Map, Game);
+            {
+                cells = PathSmoother.Smooth(
+                    cells, Game.Map, Game,
+                    canTraverseForest: CanTraverseForest || FliesOverObstacles);
+            }
 
             var queue = new Queue<Vector2Int>();
             Vector2Int? last = null;
@@ -707,8 +722,10 @@ namespace RtsServer.App.Battle.Units
             BreakDiagonalWaypoint();
 
             // Тела друг друга не блокируют клетку: расхождение делает круглый толчок.
-            // Постройка на следующей клетке (или построили на маршруте) — сразу перестраиваем путь.
-            if (targetPoint.HasValue && NavHelper.IsBlockedByConstruction(Game, targetPoint.Value))
+            // Постройка на маршруте — перестраиваем (воздушные юниты летят поверх).
+            if (targetPoint.HasValue
+                && !FliesOverObstacles
+                && NavHelper.IsBlockedByConstruction(Game, targetPoint.Value))
             {
                 CurrentSpeed = 0;
                 targetPoint = null;
@@ -1306,7 +1323,10 @@ namespace RtsServer.App.Battle.Units
             if (standTile == null)
                 return false;
             int standHeight = standTile.Height;
-            return !NavHelper.CircleHitsBlocked(Game.Map, Game, pos.X, pos.Y, CollisionRadius, standHeight);
+            return !NavHelper.CircleHitsBlocked(
+                Game.Map, Game, pos.X, pos.Y, CollisionRadius, standHeight,
+                waterCraft: MovesOnWater,
+                forestBlocks: !CanTraverseForest && !FliesOverObstacles);
         }
 
         private void UpdateSpeed(double deltaTime)

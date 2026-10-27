@@ -1,6 +1,6 @@
 {
   "MapCode": "demo_mountain",
-  "StartingResources": 1000,
+  "StartingResources": 3000,
   "PlayerStarts": [
     {
       "PlayerOwnerNum": 0,
@@ -35,5 +35,22 @@
       }
     }
   ],
-  "Units": []
+  "Units": [
+    {
+      "PlayerOwnerNum": 0,
+      "Code": "MobileConstructionCenter",
+      "Position": {
+        "X": 25,
+        "Y": 13
+      }
+    },
+    {
+      "PlayerOwnerNum": 1,
+      "Code": "MobileConstructionCenter",
+      "Position": {
+        "X": 28,
+        "Y": 50
+      }
+    }
+  ]
 }

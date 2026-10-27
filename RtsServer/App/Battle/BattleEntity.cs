@@ -9,6 +9,8 @@ namespace RtsServer.App.Battle
         public int Id { get; protected set; }
         public string Code { get; protected set; }
         public bool IsDestroyed { get; protected set; }
+        /// <summary>Убрано сворачиванием/трансформом — клиент не играет death FX.</summary>
+        public bool SuppressDeathFx { get; protected set; }
         public Action? OnDestroyAction { get; set; }
         public int OwnerId { get; protected set; }
         public Vector2Float Position { get; protected set; }
@@ -28,6 +30,13 @@ namespace RtsServer.App.Battle
 
         public virtual void Destroy()
         {
+            Destroy(suppressDeathFx: false);
+        }
+
+        /// <summary>Убрать сущность; suppressDeathFx — упаковка МСЦ и т.п., без взрывов на клиенте.</summary>
+        public virtual void Destroy(bool suppressDeathFx)
+        {
+            SuppressDeathFx = suppressDeathFx;
             IsDestroyed = true;
             OnDestroyAction?.Invoke();
         }

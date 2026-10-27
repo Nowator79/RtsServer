@@ -1,5 +1,6 @@
 using RtsServer.App.Battle.Constructions;
 using RtsServer.App.Battle.Dto;
+using RtsServer.App.Battle.Interfaces;
 using RtsServer.App.NetWorkDto;
 
 namespace RtsServer.App.Adapters
@@ -12,26 +13,28 @@ namespace RtsServer.App.Adapters
             string productionUnitCode = "";
             string productionQueue = "";
 
-            if (construction is MilitaryFactoryConstruction military)
+            if (construction is IUnitProductionHost host)
             {
-                productionProgress = military.ProductionProgress;
-                productionUnitCode = military.CurrentProductionCode ?? "";
-                productionQueue = military.ProductionQueueCsv;
-            }
-            else if (construction is AirFactoryConstruction air)
-            {
-                productionProgress = air.ProductionProgress;
-                productionUnitCode = air.CurrentProductionCode ?? "";
-                productionQueue = air.ProductionQueueCsv;
-            }
-            else if (construction is BarracksConstruction barracks)
-            {
-                productionProgress = barracks.ProductionProgress;
-                productionUnitCode = barracks.CurrentProductionCode ?? "";
-                productionQueue = barracks.ProductionQueueCsv;
+                productionProgress = host.ProductionProgress;
+                productionUnitCode = host.CurrentProductionCode ?? "";
+                productionQueue = host.ProductionQueueCsv;
             }
 
-            float buildDuration = construction.IsBuilt ? 0f : construction.BuildDurationSeconds;
+            float buildDuration = (construction.IsBuilt && !construction.IsPacking)
+                ? 0f
+                : construction.BuildDurationSeconds;
+
+            int shotSerial = 0;
+            float shotAimX = 0f;
+            float shotAimY = 0f;
+            float turretRotation = 0f;
+            if (construction is IWeaponFxSource fx)
+            {
+                shotSerial = fx.ShotSerial;
+                shotAimX = fx.ShotAimX;
+                shotAimY = fx.ShotAimY;
+                turretRotation = fx.TurretRotation;
+            }
 
             return new NConstruction(
                 construction.Id,
@@ -45,7 +48,13 @@ namespace RtsServer.App.Adapters
                 productionProgress,
                 productionUnitCode,
                 productionQueue,
-                buildDuration);
+                buildDuration,
+                shotSerial,
+                shotAimX,
+                shotAimY,
+                turretRotation,
+                construction.FacingYaw,
+                construction.IsPacking);
         }
     }
 }

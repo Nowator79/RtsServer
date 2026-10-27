@@ -17,6 +17,11 @@ namespace RtsServer.App.NetWork.Tcp
         private readonly INetWorkServer _server;
         private readonly CancellationTokenSource _cts = new();
         private readonly SemaphoreSlim _writeLock = new(1, 1);
+        /// <summary>
+        /// Один reader на соединение. Новый StreamReader на каждый ReadAsync буферизует
+        /// несколько строк и при Dispose выбрасывает их — из пачки приказов доходит 1–2.
+        /// </summary>
+        private StreamReader? _reader;
         private bool _disposed;
 
         public string Id { get; }
@@ -80,11 +85,19 @@ namespace RtsServer.App.NetWork.Tcp
 
         public async Task<MainResponse> ReadAsync(CancellationToken cancellationToken)
         {
-            using var reader = new StreamReader(Stream, Encoding.UTF8, leaveOpen: true);
-            string? jsonLine;
+            _reader ??= new StreamReader(
+                Stream,
+                Encoding.UTF8,
+                detectEncodingFromByteOrderMarks: false,
+                bufferSize: 1024,
+                leaveOpen: true);
 
-            while ((jsonLine = await reader.ReadLineAsync()) != null)
+            while (true)
             {
+                string? jsonLine = await _reader.ReadLineAsync(cancellationToken).ConfigureAwait(false);
+                if (jsonLine == null)
+                    throw new IOException("Соединение закрыто");
+
                 try
                 {
                     var response = JsonSerializer.Deserialize<MainResponse>(jsonLine);
@@ -92,6 +105,7 @@ namespace RtsServer.App.NetWork.Tcp
                     {
                         if (response.Action == "/gameBattle/unitSetTarget/")
                             _logger.LogDebug("Получено: {Json}", jsonLine);
+                        CountRead++;
                         return response;
                     }
                 }
@@ -101,8 +115,6 @@ namespace RtsServer.App.NetWork.Tcp
                     throw;
                 }
             }
-
-            throw new IOException("Соединение закрыто");
         }
 
         public async Task WriteAsync(MainResponse response, CancellationToken cancellationToken)
@@ -184,6 +196,8 @@ namespace RtsServer.App.NetWork.Tcp
 
             try
             {
+                _reader?.Dispose();
+                _reader = null;
                 Stream?.Dispose();
                 TcpClient?.Dispose();
                 _server.DisconnectUser(this);

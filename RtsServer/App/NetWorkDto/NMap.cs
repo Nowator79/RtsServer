@@ -1,4 +1,4 @@
-﻿using RtsServer.App.FileSystem.Dto;
+using RtsServer.App.FileSystem.Dto;
 
 namespace RtsServer.App.NetWorkDto
 {
@@ -23,5 +23,11 @@ namespace RtsServer.App.NetWorkDto
         public int Length { get; set; }
         public string Name { get; set; }
         public string Code { get; set; }
+
+        /// <summary>Sparse руда для визуала (только ненулевые клетки).</summary>
+        public List<NOreCell>? Ore { get; set; }
+
+        /// <summary>Sparse деревья (Variant &gt; 0).</summary>
+        public List<NTreeCell>? Trees { get; set; }
     }
 }

@@ -14,6 +14,9 @@ namespace RtsServer.App.Battle.Units.AttackingPoint
         public IAttackTarget? Target { get; protected set; }
         /// <summary>Растёт на каждый выстрел этой башни. Клиент по нему играет отдачу.</summary>
         public int ShotSerial { get; private set; }
+        /// <summary>Куда целился последний выстрел (для клиентского трассера).</summary>
+        public float LastShotAimX { get; private set; }
+        public float LastShotAimY { get; private set; }
         public float Damage { get; protected set; }
         public double SpeedRotation { get; protected set; }
         public float Range { get; protected set; }
@@ -122,6 +125,13 @@ namespace RtsServer.App.Battle.Units.AttackingPoint
             if (!ignoreCooldown && now - _lastShotTime < fireCooldown)
                 return false;
 
+            // Снаряды в 2 раза медленнее + дольше loft/homing (гравитация тоже /2 в Ballistics).
+            missileSpeed = Ballistics.ScaleSpeed(missileSpeed);
+            if (loftDurationSeconds > 0)
+                loftDurationSeconds = Ballistics.ScaleDuration(loftDurationSeconds);
+            if (homingDurationSeconds is > 0)
+                homingDurationSeconds = Ballistics.ScaleDuration(homingDurationSeconds.Value);
+
             double fromHeight = CurrentUnit.GetMuzzleHeight();
             double toHeight = targetHeightOverride
                 ?? (Target != null ? Target.GetBodyHeight() : 0.5);
@@ -182,9 +192,39 @@ namespace RtsServer.App.Battle.Units.AttackingPoint
                 sharpDivertAfterLoft: sharpDivertAfterLoft);
 
             CurrentUnit.Game.AddMissile(missile);
-            ShotSerial++;
-            _lastShotTime = now;
+            RegisterShot(targetPosition);
             return true;
+        }
+
+        /// <summary>
+        /// Мгновенный импакт без снаряда: урон сразу, клиент рисует трассер по ShotSerial + LastShotAim.
+        /// </summary>
+        protected bool TryHitscanAt(IAttackTarget? target = null, bool ignoreCooldown = false)
+        {
+            target ??= Target;
+            if (target == null || target.IsDestroyed || !CanEngage(target))
+                return false;
+            if (!OwnerCanSee(target.AimPosition))
+                return false;
+
+            double now = CurrentUnit.Game.TimeSystem.GetTime();
+            if (!ignoreCooldown && now - _lastShotTime < fireCooldown)
+                return false;
+
+            float dmg = ArmorDamage.For(target.Armor);
+            if (dmg > 0.01f)
+                target.Health.TakeDamage(dmg);
+
+            RegisterShot(target.AimPosition);
+            return true;
+        }
+
+        private void RegisterShot(Vector2Float aim)
+        {
+            LastShotAimX = (float)aim.X;
+            LastShotAimY = (float)aim.Y;
+            ShotSerial++;
+            _lastShotTime = CurrentUnit.Game.TimeSystem.GetTime();
         }
 
         public virtual void CheckTarget()

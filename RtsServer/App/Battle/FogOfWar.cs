@@ -128,18 +128,28 @@ namespace RtsServer.App.Battle
             "TankAa" => 14,
             "TankArtillery" => 12,
             "AirUnit" => 16,
+            "Helicopter" => 14,
+            "MobileConstructionCenter" => 10,
+            "Ship" => 14,
+            "AirTransporter" => 12,
             _ => 8
         };
 
         public static int VisionRadiusForConstruction(string code) => code switch
         {
             "Headquarters" => 14,
+            "MobileHq" => 12,
+            "AirDropBase" => 10,
             "PowerStation" => 7,
             "SupplyCenter" => 9,
             "Barracks" => 9,
             "MilitaryFactory" => 9,
             "AirFactory" => 11,
+            "LandingPad" => 8,
+            "Wharf" => 10,
+            "Crane" => 8,
             "AntiAirTurret" => 12,
+            "MachineGunTurret" => 11,
             "Artillery" => 10,
             _ => 8
         };

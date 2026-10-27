@@ -3,8 +3,8 @@ using RtsServer.App.Battle.Dto;
 namespace RtsServer.App.Battle.Units
 {
     /// <summary>
-    /// Круги юнитов отталкивают друг друга. Сдвиг, который упирается в воду,
-    /// обрыв, скалу или постройку, не применяется.
+    /// Круги юнитов отталкивают друг друга. Земля и воздух — отдельные слои
+    /// (вертолёты не толкают танки и наоборот).
     /// </summary>
     public static class UnitSeparation
     {
@@ -13,13 +13,41 @@ namespace RtsServer.App.Battle.Units
             if (game?.Units == null || game.Units.Count < 2)
                 return;
 
+            ResolveLayer(Collect(game, groundLayer: true));
+            ResolveLayer(Collect(game, groundLayer: false));
+        }
+
+        private static List<Unit> Collect(Game game, bool groundLayer)
+        {
             List<Unit> bodies = new(game.Units.Count);
             foreach (Unit unit in game.Units)
             {
-                if (unit == null || unit.IsDestroyed || !unit.OccupiesGroundCell || unit.CollisionRadius <= 0)
+                if (unit == null || unit.IsDestroyed || unit.CollisionRadius <= 0)
                     continue;
+
+                bool isGround = unit.OccupiesGroundCell;
+                if (groundLayer)
+                {
+                    if (!isGround)
+                        continue;
+                }
+                else
+                {
+                    // Воздушный слой: летающие с радиусом (вертолёты).
+                    if (isGround || !unit.FliesOverObstacles)
+                        continue;
+                }
+
                 bodies.Add(unit);
             }
+
+            return bodies;
+        }
+
+        private static void ResolveLayer(List<Unit> bodies)
+        {
+            if (bodies.Count < 2)
+                return;
 
             for (int iter = 0; iter < 3; iter++)
             {

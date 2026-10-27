@@ -81,7 +81,8 @@ namespace RtsServer.App.Battle.Explosion
                 if (distance > effectiveRange) continue;
 
                 float factor = 1f - (distance / effectiveRange);
-                float actualDamage = _armorDamage.For(construction.Armor) * Math.Max(0f, factor);
+                // Сплэш ослаблен в 2 раза относительно точечного урона профиля.
+                float actualDamage = _armorDamage.For(construction.Armor) * Math.Max(0f, factor) * 0.5f;
                 if (actualDamage > 0f)
                     construction.Health.TakeDamage(actualDamage);
             }
@@ -117,7 +118,7 @@ namespace RtsServer.App.Battle.Explosion
             if (distance > effectiveRange) return;
 
             float factor = 1f - (distance / effectiveRange);
-            float actualDamage = _armorDamage.For(armor) * Math.Max(0f, factor);
+            float actualDamage = _armorDamage.For(armor) * Math.Max(0f, factor) * 0.5f;
             if (actualDamage > 0f)
                 health.TakeDamage(actualDamage);
         }

@@ -1,6 +1,7 @@
 using RtsServer.App.Battle;
 using RtsServer.App.Battle.Constructions;
 using RtsServer.App.Battle.Dto;
+using RtsServer.App.Battle.Interfaces;
 using RtsServer.App.Battle.Units;
 using RtsServer.App.NetWorkDto;
 
@@ -82,6 +83,11 @@ namespace RtsServer.App.Adapters
                 _missiles[m.Id] = n;
             }
 
+            // Полный мир юнитов; руда — только dirty (старт карты уже в NMap).
+            List<NOreCell>? oreUpdates = null;
+            if (game.Map?.Ore != null && game.Map.Ore.HasDirty)
+                oreUpdates = game.Map.Ore.DrainDirty();
+
             return new NGame(
                 new List<NUnit>(_changedUnits),
                 new List<NConstruction>(_changedConstructions),
@@ -90,7 +96,10 @@ namespace RtsServer.App.Adapters
                 IsDelta = false,
                 RemovedUnitIds = Array.Empty<int>(),
                 RemovedConstructionIds = Array.Empty<int>(),
-                RemovedMissileIds = Array.Empty<int>()
+                RemovedMissileIds = Array.Empty<int>(),
+                SilentRemovedUnitIds = Array.Empty<int>(),
+                SilentRemovedConstructionIds = Array.Empty<int>(),
+                OreUpdates = oreUpdates is { Count: > 0 } ? oreUpdates : null
             };
         }
 
@@ -163,16 +172,74 @@ namespace RtsServer.App.Adapters
             for (int i = 0; i < _removedMissiles.Count; i++)
                 _missiles.Remove(_removedMissiles[i]);
 
+            SplitSilentRemovals(
+                game.SilentRemovedUnitIds,
+                _removedUnits,
+                out int[] deathUnits,
+                out int[] silentUnits);
+            SplitSilentRemovals(
+                game.SilentRemovedConstructionIds,
+                _removedConstructions,
+                out int[] deathConstructions,
+                out int[] silentConstructions);
+            game.SilentRemovedUnitIds.Clear();
+            game.SilentRemovedConstructionIds.Clear();
+
+            List<NOreCell>? oreDelta = null;
+            if (game.Map?.Ore != null && game.Map.Ore.HasDirty)
+                oreDelta = game.Map.Ore.DrainDirty();
+
             return new NGame(
                 new List<NUnit>(_changedUnits),
                 new List<NConstruction>(_changedConstructions),
                 new List<NMissile>(_changedMissiles))
             {
                 IsDelta = true,
-                RemovedUnitIds = _removedUnits.Count == 0 ? Array.Empty<int>() : _removedUnits.ToArray(),
-                RemovedConstructionIds = _removedConstructions.Count == 0 ? Array.Empty<int>() : _removedConstructions.ToArray(),
-                RemovedMissileIds = _removedMissiles.Count == 0 ? Array.Empty<int>() : _removedMissiles.ToArray()
+                RemovedUnitIds = deathUnits,
+                RemovedConstructionIds = deathConstructions,
+                RemovedMissileIds = _removedMissiles.Count == 0 ? Array.Empty<int>() : _removedMissiles.ToArray(),
+                SilentRemovedUnitIds = silentUnits,
+                SilentRemovedConstructionIds = silentConstructions,
+                OreUpdates = oreDelta is { Count: > 0 } ? oreDelta : null
             };
+        }
+
+        private static void SplitSilentRemovals(
+            List<int> silentPending,
+            List<int> allRemoved,
+            out int[] deathIds,
+            out int[] silentIds)
+        {
+            if (allRemoved.Count == 0)
+            {
+                deathIds = Array.Empty<int>();
+                silentIds = Array.Empty<int>();
+                return;
+            }
+
+            HashSet<int> silentSet = silentPending.Count == 0
+                ? null
+                : new HashSet<int>(silentPending);
+            if (silentSet == null || silentSet.Count == 0)
+            {
+                deathIds = allRemoved.ToArray();
+                silentIds = Array.Empty<int>();
+                return;
+            }
+
+            var death = new List<int>(allRemoved.Count);
+            var silent = new List<int>(silentSet.Count);
+            for (int i = 0; i < allRemoved.Count; i++)
+            {
+                int id = allRemoved[i];
+                if (silentSet.Contains(id))
+                    silent.Add(id);
+                else
+                    death.Add(id);
+            }
+
+            deathIds = death.Count == 0 ? Array.Empty<int>() : death.ToArray();
+            silentIds = silent.Count == 0 ? Array.Empty<int>() : silent.ToArray();
         }
 
         private static bool UnitMatches(NUnit cached, Unit unit)
@@ -182,12 +249,16 @@ namespace RtsServer.App.Adapters
             if (Math.Abs(cached.Health - unit.Health.Value) > 0.5f) return false;
             if (Math.Abs(cached.MaxHealth - unit.Health.Max) > 0.5f) return false;
 
-            float height = unit is AirUnit ? (float)unit.GetBodyHeight() : 0f;
+            float height = !unit.OccupiesGroundCell ? (float)unit.GetBodyHeight() : 0f;
             if (Math.Abs(cached.Height - height) > 0.04f) return false;
             if (Math.Abs(cached.Rotation - unit.Rotation) > 0.4) return false;
             if (!PosEquals(cached.Position, unit.Position, 0.04)) return false;
             if (Math.Abs(cached.Info.CurSpeed - unit.CurrentSpeed) > 0.05) return false;
             if (Math.Abs(cached.Info.MaxSpeed - unit.MaxSpeed) > 0.05) return false;
+            bool lowFlight = unit is Helicopter heli && heli.IsLowFlight;
+            if (cached.IsLowFlight != lowFlight) return false;
+            float fuel = unit is AirUnit airFuel ? airFuel.Fuel01 : 1f;
+            if (Math.Abs(cached.Fuel01 - fuel) > 0.02f) return false;
 
             int len = unit.AttackingPoints?.Length ?? 0;
             int cachedLen = cached.AttackPoints?.Length ?? 0;
@@ -213,27 +284,16 @@ namespace RtsServer.App.Adapters
             if (Math.Abs(cached.Health - c.Health.Value) > 0.5f) return false;
             if (Math.Abs(cached.MaxHealth - c.Health.Max) > 0.5f) return false;
             if (Math.Abs(cached.BuildProgress - c.BuildProgress) > 0.01f) return false;
+            if (Math.Abs(cached.Rotation - c.FacingYaw) > 0.5f) return false;
 
             float productionProgress = 0f;
             string productionUnitCode = "";
             string productionQueue = "";
-            if (c is MilitaryFactoryConstruction military)
+            if (c is IUnitProductionHost host)
             {
-                productionProgress = military.ProductionProgress;
-                productionUnitCode = military.CurrentProductionCode ?? "";
-                productionQueue = military.ProductionQueueCsv;
-            }
-            else if (c is AirFactoryConstruction air)
-            {
-                productionProgress = air.ProductionProgress;
-                productionUnitCode = air.CurrentProductionCode ?? "";
-                productionQueue = air.ProductionQueueCsv;
-            }
-            else if (c is BarracksConstruction barracks)
-            {
-                productionProgress = barracks.ProductionProgress;
-                productionUnitCode = barracks.CurrentProductionCode ?? "";
-                productionQueue = barracks.ProductionQueueCsv;
+                productionProgress = host.ProductionProgress;
+                productionUnitCode = host.CurrentProductionCode ?? "";
+                productionQueue = host.ProductionQueueCsv;
             }
 
             if (Math.Abs(cached.ProductionProgress - productionProgress) > 0.02f) return false;
@@ -241,6 +301,15 @@ namespace RtsServer.App.Adapters
                 return false;
             if (!string.Equals(cached.ProductionQueue ?? "", productionQueue, StringComparison.Ordinal))
                 return false;
+
+            if (c is IWeaponFxSource fx)
+            {
+                if (cached.ShotSerial != fx.ShotSerial)
+                    return false;
+                if (Math.Abs(cached.TurretRotation - fx.TurretRotation) > 0.5f)
+                    return false;
+            }
+
             return true;
         }
 

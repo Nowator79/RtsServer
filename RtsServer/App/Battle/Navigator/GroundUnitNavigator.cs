@@ -37,13 +37,16 @@ namespace RtsServer.App.Battle.Navigator
                 return;
 
             var targetChunk = Map.GetArrayMap()[tx, ty];
-            if (targetChunk.Id == 0)
+            bool fly = Unit?.FliesOverObstacles ?? false;
+            bool water = Unit?.MovesOnWater ?? false;
+            // Вода запрещена наземным (кроме клика→ближайшая вода для кораблей). Воздух — куда угодно.
+            if (!water && !fly && targetChunk.Id == 0)
                 return;
 
             Vector2Int destination = Unit.TargetPosition;
             if (retargetDestination)
             {
-                // Новый приказ — подобрать свободный финиш. Без «зазора 1 клетка» (он ломал колонны).
+                // Корабль: клик по суше → ближайшая вода. Наземный: свободная клетка у цели.
                 destination = FindNearestFreeCell(Unit.TargetPosition);
                 Unit.SetNavigatingDestination(destination);
             }
@@ -68,7 +71,11 @@ namespace RtsServer.App.Battle.Navigator
                 ? reservations.GetExtraCost
                 : null;
 
-            using NavWave navWave = new(Map, pathStart, destination, Unit, extraCost);
+            bool flyNav = Unit?.FliesOverObstacles ?? false;
+            bool waterNav = Unit?.MovesOnWater ?? false;
+            using NavWave navWave = new(
+                Map, pathStart, destination, Unit, extraCost,
+                flyOverObstacles: flyNav, waterOnly: waterNav);
             navWave.Run();
 
             if (navWave.IsFail)
@@ -81,7 +88,10 @@ namespace RtsServer.App.Battle.Navigator
 
             Queue<Vector2Int> route = navWave.GetRoutePath();
             List<Vector2Int> cells = GridPathUtil.EnsureAdjacent(route.ToList());
-            cells = PathSmoother.Smooth(cells, Map, Unit.Game);
+            cells = PathSmoother.Smooth(
+                cells, Map, Unit.Game,
+                ignoreObstacles: flyNav || waterNav,
+                canTraverseForest: flyNav || (Unit?.CanTraverseForest ?? false));
             reservations?.AddPath(cells);
             ApplyRoute(new Queue<Vector2Int>(cells));
         }
@@ -101,6 +111,7 @@ namespace RtsServer.App.Battle.Navigator
             if (IsFreeForUnit(desired))
                 return desired;
 
+            bool waterUnit = Unit?.MovesOnWater == true;
             const int maxRadius = 48;
             var visited = new HashSet<Vector2Int> { desired };
             var queue = new Queue<(Vector2Int cell, int dist)>();
@@ -120,7 +131,9 @@ namespace RtsServer.App.Battle.Navigator
                     if (IsFreeForUnit(near))
                         return near;
 
-                    if (IsWalkableTerrain(near))
+                    // Корабль: flood-fill по любой клетке, пока не найдём воду.
+                    // Земля: только по проходимому рельефу.
+                    if (waterUnit || IsWalkableTerrain(near))
                         queue.Enqueue((near, dist + 1));
                 }
             }
@@ -130,10 +143,18 @@ namespace RtsServer.App.Battle.Navigator
 
         private bool IsWalkableTerrain(Vector2Int cell)
         {
+            if (Unit?.FliesOverObstacles == true)
+                return true;
+
             var chunk = Map.GetArrayMap()[cell.X, cell.Y];
+            if (Unit?.MovesOnWater == true)
+                return chunk != null && chunk.Id == 0;
+
             if (!NavHelper.IsWalkableHeight(chunk))
                 return false;
             if (NavHelper.IsBlockedByConstruction(Unit?.Game, cell))
+                return false;
+            if (!(Unit?.CanTraverseForest ?? false) && NavHelper.IsBlockedByForest(Map, cell.X, cell.Y))
                 return false;
             return true;
         }

@@ -13,7 +13,7 @@ namespace RtsServer.App.Battle.Constructions
         public const int BuildCost = 100;
         public const float BuildTime = 6f;
 
-        public int EnergyProvided => IsBuilt ? 100 : 0;
+        public int EnergyProvided => IsBuilt ? 200 : 0;
 
         public PowerStationConstruction(Vector2Int position, int playerOwner)
             : base(maxHealth, maxHealth, position, new(sizeX, sizeY), Code, playerOwner) { }

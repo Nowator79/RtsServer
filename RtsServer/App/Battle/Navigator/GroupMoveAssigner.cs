@@ -18,15 +18,24 @@ namespace RtsServer.App.Battle.Navigator
 
             List<Unit> ground = new();
             List<Unit> air = new();
+            List<Unit> water = new();
             foreach (Unit u in units)
             {
                 if (u == null || u.IsDestroyed) continue;
-                if (u.OccupiesGroundCell) ground.Add(u);
-                else air.Add(u);
+                if (u.FliesOverObstacles || !u.OccupiesGroundCell)
+                    air.Add(u);
+                else if (u.MovesOnWater)
+                    water.Add(u);
+                else
+                    ground.Add(u);
             }
 
             foreach (Unit a in air)
                 a.SetTargetPosition(click, attackMove);
+
+            // Корабли: свой навмеш (только вода), без сухопутных слотов.
+            foreach (Unit w in water)
+                w.SetTargetPosition(click, attackMove);
 
             if (ground.Count == 0)
                 return;

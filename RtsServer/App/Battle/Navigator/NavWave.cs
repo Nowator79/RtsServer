@@ -26,6 +26,9 @@ namespace RtsServer.App.Battle.Navigator
         private readonly Unit? _self;
         private readonly Func<Vector2Int, int>? _extraCost;
         private readonly bool _ignoreParked;
+        private readonly bool _flyOverObstacles;
+        private readonly bool _waterOnly;
+        private readonly bool _canTraverseForest;
 
         private readonly List<Vector2Int> _route = new();
         private Vector2Int?[,] _cameFrom = null!;
@@ -44,7 +47,9 @@ namespace RtsServer.App.Battle.Navigator
             Vector2Int endPoint,
             Unit? self = null,
             Func<Vector2Int, int>? extraCost = null,
-            bool ignoreParkedUnits = false)
+            bool ignoreParkedUnits = false,
+            bool flyOverObstacles = false,
+            bool waterOnly = false)
         {
             _map = map ?? throw new ArgumentNullException(nameof(map));
             _startPoint = startPoint;
@@ -52,6 +57,9 @@ namespace RtsServer.App.Battle.Navigator
             _self = self;
             _extraCost = extraCost;
             _ignoreParked = ignoreParkedUnits;
+            _flyOverObstacles = flyOverObstacles || (self?.FliesOverObstacles ?? false);
+            _waterOnly = waterOnly || (self?.MovesOnWater ?? false);
+            _canTraverseForest = _flyOverObstacles || (self?.CanTraverseForest ?? false);
         }
 
         public void Run()
@@ -96,6 +104,9 @@ namespace RtsServer.App.Battle.Navigator
             int w = _map.Width;
             int h = _map.Length;
             _constructionBlocked = new bool[w, h];
+
+            if (_flyOverObstacles)
+                return;
 
             Game? game = _self?.Game;
             if (game == null)
@@ -245,7 +256,22 @@ namespace RtsServer.App.Battle.Navigator
             if (IsStartCell(x, y))
                 return true;
 
+            // Вертолёт: любая клетка карты, включая воду и здания.
+            if (_flyOverObstacles)
+            {
+                _ = ignoreParkedUnits;
+                return true;
+            }
+
             ChunkBase chunk = _tiles![x, y];
+
+            // Корабль: только вода (Id==0).
+            if (_waterOnly)
+            {
+                _ = ignoreParkedUnits;
+                return chunk != null && chunk.Id == 0;
+            }
+
             if (!NavHelper.IsWalkableHeight(chunk))
                 return false;
 
@@ -254,6 +280,9 @@ namespace RtsServer.App.Battle.Navigator
                 return false;
 
             if (_constructionBlocked != null && _constructionBlocked[x, y])
+                return false;
+
+            if (!_canTraverseForest && NavHelper.IsBlockedByForest(_map, x, y))
                 return false;
 
             // Тела юнитов не стены навмеша: их разводит круглый толчок.

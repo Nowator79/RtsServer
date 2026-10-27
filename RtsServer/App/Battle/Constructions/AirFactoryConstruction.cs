@@ -5,8 +5,8 @@ using RtsServer.App.Battle.Units;
 
 namespace RtsServer.App.Battle.Constructions
 {
-    /// <summary>Авиазавод — производство AirUnit.</summary>
-    public class AirFactoryConstruction : Construction, IEnergyConsumer, IUnitFactory
+    /// <summary>Авиазавод — производство авиации. Самолётам нужна отдельная LandingPad.</summary>
+    public class AirFactoryConstruction : Construction, IEnergyConsumer, IUnitProductionHost
     {
         public const int sizeX = 3;
         public const int sizeY = 3;
@@ -27,6 +27,23 @@ namespace RtsServer.App.Battle.Constructions
         public int OrdersCount =>
             (_currentUnitCode != null ? 1 : 0) + _queue.Count;
 
+        /// <summary>Сколько AirUnit сейчас в производстве/очереди этого завода.</summary>
+        public int CountAirUnitsInProduction
+        {
+            get
+            {
+                int n = 0;
+                if (_currentUnitCode == "AirUnit")
+                    n++;
+                foreach (string code in _queue)
+                {
+                    if (code == "AirUnit")
+                        n++;
+                }
+                return n;
+            }
+        }
+
         private string? _currentUnitCode;
         private float _productionProgress;
         private float _productionDuration = 1f;
@@ -34,7 +51,9 @@ namespace RtsServer.App.Battle.Constructions
         private string _queueCsv = "";
 
         public AirFactoryConstruction(Vector2Int position, int playerOwner)
-            : base(maxHealth, maxHealth, position, new(sizeX, sizeY), Code, playerOwner) { }
+            : base(maxHealth, maxHealth, position, new(sizeX, sizeY), Code, playerOwner)
+        {
+        }
 
         public static bool TryGetUnitRecipe(string unitCode, out int cost, out float buildSeconds)
         {
@@ -43,6 +62,14 @@ namespace RtsServer.App.Battle.Constructions
                 case "AirUnit":
                     cost = 250;
                     buildSeconds = 14f;
+                    return true;
+                case "Helicopter":
+                    cost = 350;
+                    buildSeconds = 14f;
+                    return true;
+                case "AirTransporter":
+                    cost = 320;
+                    buildSeconds = 16f;
                     return true;
                 default:
                     cost = 0;
@@ -61,6 +88,11 @@ namespace RtsServer.App.Battle.Constructions
             if (!IsBuilt || !CanProduce(unitCode)) return false;
             if (OrdersCount >= UnitProductionLimits.MaxOrders) return false;
 
+            // Самолёту нужна свободная посадочная площадка у владельца.
+            if (unitCode == "AirUnit"
+                && !LandingPadConstruction.OwnerCanAcceptNewAirUnit(Game, OwnerId))
+                return false;
+
             if (_currentUnitCode == null)
             {
                 _currentUnitCode = unitCode;
@@ -75,6 +107,16 @@ namespace RtsServer.App.Battle.Constructions
 
             return true;
         }
+
+        public bool TryCancelOne(string unitCode) =>
+            UnitProductionQueueOps.TryCancelOne(
+                ref _currentUnitCode,
+                ref _productionProgress,
+                ref _productionDuration,
+                _queue,
+                RebuildQueueCsv,
+                code => TryGetUnitRecipe(code, out _, out float seconds) ? (true, seconds) : (false, 0f),
+                unitCode);
 
         private void RebuildQueueCsv()
         {
@@ -119,6 +161,27 @@ namespace RtsServer.App.Battle.Constructions
 
             try
             {
+                if (unitCode == "AirUnit")
+                {
+                    LandingPadConstruction? pad = LandingPadConstruction.FindNearestWithFreeSlot(
+                        Game, OwnerId, AimPosition);
+                    if (pad == null)
+                        return;
+
+                    Unit air = UnitFactory.GetByCode(unitCode, pad.AimPosition, OwnerId);
+                    air.SetGame(Game);
+                    if (air is not AirUnit airUnit
+                        || !pad.LandingPads.TryReserve(airUnit, out int slot, out Vector2Float padPos))
+                        return;
+
+                    // Слот резервируем, сам самолёт вылетает с завода и садится на площадку.
+                    // PendingRally не ставим — иначе Init→SetTarget сорвёт Returning.
+                    airUnit.BindLandingPad(pad, slot, padPos, startParked: false);
+                    airUnit.StartDeliveryToPad(AimPosition);
+                    Game.UnitsForAdd.Add(air);
+                    return;
+                }
+
                 Unit unit = UnitFactory.GetByCode(unitCode, gate.GetFloat(), OwnerId);
                 unit.SetGame(Game);
                 unit.PendingRallyCell = rally;

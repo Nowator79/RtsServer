@@ -38,7 +38,7 @@ namespace RtsServer.App.Battle.Units.AttackingPoint
             if (!RotationToTarget(Target.AimPosition))
                 return;
 
-            if (!TryFireAt(Target.AimPosition, missileCode: "mg_tracer", missileSpeed: 22f, explosionRange: 0.75f, flatTrajectory: true))
+            if (!TryHitscanAt(Target))
                 return;
 
             _shotsInBurst++;

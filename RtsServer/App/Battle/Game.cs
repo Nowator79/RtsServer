@@ -57,6 +57,10 @@ namespace RtsServer.App.Battle
         public HashSet<Unit> UnitsForAdd { get; } = [];
         public HashSet<Missile> MissilesForAdd { get; } = [];
         public HashSet<Construction> ConstructionsForAdd { get; } = [];
+
+        /// <summary>Id, убранные упаковкой (МСЦ) — клиент снимает без death FX. Чистится после синка.</summary>
+        public List<int> SilentRemovedUnitIds { get; } = [];
+        public List<int> SilentRemovedConstructionIds { get; } = [];
         public BattleManager? BattleManager { get; }
         public TimeSystem TimeSystem { get; }
 
@@ -223,7 +227,9 @@ namespace RtsServer.App.Battle
                 && (nGame.Missiles == null || nGame.Missiles.Count == 0)
                 && (nGame.RemovedUnitIds == null || nGame.RemovedUnitIds.Length == 0)
                 && (nGame.RemovedConstructionIds == null || nGame.RemovedConstructionIds.Length == 0)
-                && (nGame.RemovedMissileIds == null || nGame.RemovedMissileIds.Length == 0))
+                && (nGame.RemovedMissileIds == null || nGame.RemovedMissileIds.Length == 0)
+                && (nGame.SilentRemovedUnitIds == null || nGame.SilentRemovedUnitIds.Length == 0)
+                && (nGame.SilentRemovedConstructionIds == null || nGame.SilentRemovedConstructionIds.Length == 0))
             {
                 Interlocked.Exchange(ref _gameSyncInFlight, 0);
                 return;
@@ -498,6 +504,7 @@ namespace RtsServer.App.Battle
                     : (player.Id == winnerPlayerId ? "Victory" : "Defeat");
 
                 int xpGain = 0;
+                int creditsGain = 0;
                 try
                 {
                     xpGain = ApplyBattleExperience(player, result);
@@ -507,6 +514,15 @@ namespace RtsServer.App.Battle
                     _logger.LogWarning(ex, "Failed to award XP to player {PlayerId}", player.Id);
                 }
 
+                try
+                {
+                    creditsGain = ApplyBattleCredits(player, result);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to award Credits to player {PlayerId}", player.Id);
+                }
+
                 var userTcp = BattleManager.GameServer.TcpServer.GetClientByUserAuth(player.UserAuth);
                 if (userTcp == null || !userTcp.IsConnected())
                     continue;
@@ -514,7 +530,7 @@ namespace RtsServer.App.Battle
                 try
                 {
                     new EndGameSender(userTcp)
-                        .SetDate(new EndGameResult(result, winnerPlayerId, matchDuration, xpGain))
+                        .SetDate(new EndGameResult(result, winnerPlayerId, matchDuration, xpGain, creditsGain))
                         .SendAsync(CancellationToken.None)
                         .GetAwaiter()
                         .GetResult();
@@ -573,6 +589,45 @@ namespace RtsServer.App.Battle
                 user.Experience,
                 PlayerProgression.XpRequiredForNextLevel(user.Level));
             return xpGain;
+        }
+
+        private int ApplyBattleCredits(Player player, string result)
+        {
+            UserAuth? user = player.UserAuth;
+            if (user == null)
+                return 0;
+
+            int creditsGain = PlayerProgression.CreditsForResult(result);
+            if (creditsGain <= 0)
+                return 0;
+
+            long next = (long)user.Credits + creditsGain;
+            user.Credits = next > int.MaxValue ? int.MaxValue : (int)next;
+
+            BattleManager?.GameServer?.DbUsers.Add(user);
+
+            try
+            {
+                using ApplicationContext db = new();
+                UserAuth? dbUser = db.Users.FirstOrDefault(u => u.Id == user.Id);
+                if (dbUser != null)
+                {
+                    dbUser.Credits = user.Credits;
+                    db.SaveChanges();
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to persist Credits for user {UserId}", user.Id);
+            }
+
+            _logger.LogInformation(
+                "Credits +{Credits} ({Result}) user={User} balance={Balance}",
+                creditsGain,
+                result,
+                user.UserName,
+                user.Credits);
+            return creditsGain;
         }
 
         private void ClearConstructions()
@@ -718,6 +773,46 @@ namespace RtsServer.App.Battle
             }
         }
 
+        public void TryCancelProduceUnit(int factoryId, string unitCode, int playerId)
+        {
+            if (!Players.Any(p => p.Id == playerId))
+            {
+                _logger.LogWarning("Player {PlayerId} not found in game {GameId}", playerId, Id);
+                return;
+            }
+
+            Construction? construction = Constructions.FirstOrDefault(c => c.Id == factoryId && !c.IsDestroyed);
+            if (construction is not IUnitFactory factory)
+            {
+                _logger.LogWarning("Factory {FactoryId} not found for cancel by player {PlayerId}", factoryId, playerId);
+                return;
+            }
+
+            if (construction.OwnerId != playerId)
+            {
+                _logger.LogWarning("Factory {FactoryId} not owned by player {PlayerId} (cancel)", factoryId, playerId);
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(unitCode))
+                return;
+
+            if (!factory.TryGetRecipe(unitCode, out int cost, out _))
+            {
+                _logger.LogWarning("Unknown unit recipe for cancel: {UnitCode}", unitCode);
+                return;
+            }
+
+            if (!factory.TryCancelOne(unitCode))
+            {
+                _logger.LogWarning("Factory {FactoryId} has no {UnitCode} to cancel", factoryId, unitCode);
+                return;
+            }
+
+            if (cost > 0)
+                RefundPlayerResources(playerId, cost);
+        }
+
         public async Task EndAsync()
         {
             lock (_lifecycleLock)
@@ -775,6 +870,14 @@ namespace RtsServer.App.Battle
 
         private void RemoveEntity(BattleEntity entity)
         {
+            if (entity.SuppressDeathFx)
+            {
+                if (entity is Unit)
+                    SilentRemovedUnitIds.Add(entity.Id);
+                else if (entity is Construction)
+                    SilentRemovedConstructionIds.Add(entity.Id);
+            }
+
             if (entity is Unit unit)
                 Units.Remove(unit);
             else if (entity is Construction construction)
@@ -881,7 +984,8 @@ namespace RtsServer.App.Battle
         /// <summary>
         /// Площадка: границы, ровный Height, не вода, свободно, в радиусе своих зданий.
         /// </summary>
-        public bool CanPlaceConstruction(string code, Vector2Int position, int playerId, out string error)
+        public bool CanPlaceConstruction(
+            string code, Vector2Int position, int playerId, out string error, bool forDeploy = false)
         {
             error = "";
             if (Map == null)
@@ -920,11 +1024,17 @@ namespace RtsServer.App.Battle
                         error = $"разный уровень клеток ({chunk.Height} != {baseHeight})";
                         return false;
                     }
+                    if (Map.Trees.HasTree(x, y))
+                    {
+                        error = "лес";
+                        return false;
+                    }
                 }
             }
 
             foreach (Construction existing in Constructions.Concat(ConstructionsForAdd))
             {
+                if (existing.IsDestroyed) continue;
                 if (FootprintsOverlap(position, size, existing.Position.ToInt(), existing.Size))
                 {
                     error = "занято другим зданием";
@@ -932,12 +1042,32 @@ namespace RtsServer.App.Battle
                 }
             }
 
+            // Центр снабжения: хотя бы одна клетка footprint на руде.
+            if (code == SupplyCenterConstruction.Code && !FootprintTouchesOre(position, sizeX, sizeY))
+            {
+                error = "нужна руда под зданием";
+                return false;
+            }
+
+            // Deploy MCC: без радиуса (можно развернуть в поле).
+            if (forDeploy)
+                return true;
+
+            // Зону дают развёрнутый МСЦ и AirDropBase.
+            if (code == WharfConstruction.Code && !HasAdjacentWater(position, sizeX, sizeY))
+            {
+                error = "верфи нужна вода рядом";
+                return false;
+            }
+
             bool inRange = false;
             foreach (Construction existing in Constructions.Concat(ConstructionsForAdd))
             {
-                if (existing.OwnerId != playerId) continue;
+                if (existing.OwnerId != playerId || existing.IsDestroyed) continue;
+                if (!IsBuildZoneProvider(existing.Code)) continue;
+                int range = GetBuildZoneRange(existing.Code);
                 int gap = FootprintGapCells(position, size, existing.Position.ToInt(), existing.Size);
-                if (gap <= BuildRangeCells)
+                if (gap <= range)
                 {
                     inRange = true;
                     break;
@@ -946,11 +1076,107 @@ namespace RtsServer.App.Battle
 
             if (!inRange)
             {
-                error = $"дальше {BuildRangeCells} клеток от своего здания";
+                error = "вне зоны строительства (МСЦ / воздушная база)";
                 return false;
             }
 
             return true;
+        }
+
+        /// <summary>МСЦ, AirDropBase и стационарный кран расширяют зону строительства.</summary>
+        public static bool IsBuildZoneProvider(string constructionCode) =>
+            constructionCode == MobileHqConstruction.Code
+            || constructionCode == AirDropBaseConstruction.Code
+            || constructionCode == CraneConstruction.Code;
+
+        public static int GetBuildZoneRange(string constructionCode) => constructionCode switch
+        {
+            MobileHqConstruction.Code => BuildRangeCells,
+            AirDropBaseConstruction.Code => AirDropBaseConstruction.BuildZoneRange,
+            CraneConstruction.Code => CraneConstruction.BuildZoneRange,
+            _ => 0
+        };
+
+        private bool HasAdjacentWater(Vector2Int position, int sizeX, int sizeY)
+        {
+            if (Map == null) return false;
+            var chunks = Map.GetArrayMap();
+            for (int x = position.X - 1; x <= position.X + sizeX; x++)
+            {
+                for (int y = position.Y - 1; y <= position.Y + sizeY; y++)
+                {
+                    bool inside = x >= position.X && x < position.X + sizeX
+                        && y >= position.Y && y < position.Y + sizeY;
+                    if (inside) continue;
+                    if (x < 0 || y < 0 || x >= Map.Width || y >= Map.Length) continue;
+                    if (chunks[x, y] != null && chunks[x, y].Id == 0)
+                        return true;
+                }
+            }
+
+            return false;
+        }
+
+        private bool FootprintTouchesOre(Vector2Int position, int sizeX, int sizeY)
+        {
+            if (Map?.Ore == null) return false;
+            for (int x = position.X; x < position.X + sizeX; x++)
+            {
+                for (int y = position.Y; y < position.Y + sizeY; y++)
+                {
+                    if (Map.Ore.Get(x, y) > 0)
+                        return true;
+                }
+            }
+
+            return false;
+        }
+
+        public void TryDeployUnit(int unitId, Vector2Int cell, int playerId)
+        {
+            Unit? unit = Units.FirstOrDefault(u => u.Id == unitId && !u.IsDestroyed);
+            if (unit == null || unit.OwnerId != playerId)
+                return;
+            if (unit is not IDeployableUnit deployable)
+                return;
+
+            // Клетка только с позиции юнита: клиентский cell часто ошибается из‑за transform карты.
+            Vector2Int unitCell = new((int)Math.Floor(unit.Position.X), (int)Math.Floor(unit.Position.Y));
+            deployable.TryDeploy(unitCell);
+        }
+
+        /// <summary>Переключить низкий полёт вертолёта (невидим для ПВО, медленнее, уязвим к земле).</summary>
+        public void TryToggleHelicopterLowFlight(int unitId, int playerId)
+        {
+            Unit? unit = Units.FirstOrDefault(u => u.Id == unitId && !u.IsDestroyed);
+            if (unit == null || unit.OwnerId != playerId)
+                return;
+            if (unit is not Helicopter heli)
+                return;
+
+            heli.ToggleLowFlight();
+        }
+
+        public void TryOrderAirUnitReturnToPad(int unitId, int playerId)
+        {
+            Unit? unit = Units.FirstOrDefault(u => u.Id == unitId && !u.IsDestroyed);
+            if (unit == null || unit.OwnerId != playerId)
+                return;
+            if (unit is not AirUnit air)
+                return;
+
+            air.OrderReturnToPad();
+        }
+
+        public void TryUndeployConstruction(int constructionId, int playerId)
+        {
+            Construction? c = Constructions.FirstOrDefault(x => x.Id == constructionId && !x.IsDestroyed);
+            if (c == null || c.OwnerId != playerId)
+                return;
+            if (c is not IUndeployableConstruction undeployable)
+                return;
+
+            undeployable.TryUndeploy();
         }
 
         private static bool FootprintsOverlap(Vector2Int aPos, Vector2Int aSize, Vector2Int bPos, Vector2Int bSize)

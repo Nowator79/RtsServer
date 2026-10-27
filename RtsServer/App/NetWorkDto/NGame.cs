@@ -13,6 +13,13 @@ namespace RtsServer.App.NetWorkDto
         public int[]? RemovedConstructionIds { get; set; }
         public int[]? RemovedMissileIds { get; set; }
 
+        /// <summary>Убраны упаковкой/трансформом — без death FX на клиенте.</summary>
+        public int[]? SilentRemovedUnitIds { get; set; }
+        public int[]? SilentRemovedConstructionIds { get; set; }
+
+        /// <summary>Изменения руды: Amount=0 — клетка опустела и должна исчезнуть на клиенте.</summary>
+        public List<NOreCell>? OreUpdates { get; set; }
+
         public NGame(List<NUser> users, List<NUnit> units, List<NConstruction> constructions)
         {
             Users = users;

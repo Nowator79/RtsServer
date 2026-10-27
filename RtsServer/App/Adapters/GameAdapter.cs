@@ -30,7 +30,9 @@ namespace RtsServer.App.Adapters
                 IsDelta = false,
                 RemovedUnitIds = Array.Empty<int>(),
                 RemovedConstructionIds = Array.Empty<int>(),
-                RemovedMissileIds = Array.Empty<int>()
+                RemovedMissileIds = Array.Empty<int>(),
+                SilentRemovedUnitIds = Array.Empty<int>(),
+                SilentRemovedConstructionIds = Array.Empty<int>()
             };
         }
     }

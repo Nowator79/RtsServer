@@ -6,7 +6,7 @@ using RtsServer.App.Battle.Units;
 namespace RtsServer.App.Battle.Constructions
 {
     /// <summary>Барак — производство пехоты: Soldier / Grenadier.</summary>
-    public class BarracksConstruction : Construction, IEnergyConsumer, IUnitFactory
+    public class BarracksConstruction : Construction, IEnergyConsumer, IUnitProductionHost
     {
         public const int sizeX = 2;
         public const int sizeY = 2;
@@ -41,7 +41,7 @@ namespace RtsServer.App.Battle.Constructions
             switch (unitCode)
             {
                 case "Soldier":
-                    cost = 40;
+                    cost = 60;
                     buildSeconds = 4f;
                     return true;
                 case "Grenadier":
@@ -79,6 +79,16 @@ namespace RtsServer.App.Battle.Constructions
 
             return true;
         }
+
+        public bool TryCancelOne(string unitCode) =>
+            UnitProductionQueueOps.TryCancelOne(
+                ref _currentUnitCode,
+                ref _productionProgress,
+                ref _productionDuration,
+                _queue,
+                RebuildQueueCsv,
+                code => TryGetUnitRecipe(code, out _, out float seconds) ? (true, seconds) : (false, 0f),
+                unitCode);
 
         private void RebuildQueueCsv()
         {

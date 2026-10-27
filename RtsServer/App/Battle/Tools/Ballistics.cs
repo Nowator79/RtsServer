@@ -9,10 +9,19 @@ namespace RtsServer.App.Battle.Tools
     public static class Ballistics
     {
         /// <summary>
-        /// Ниже — выше дуга и больше досягаемость при той же дульной скорости.
-        /// При v=11 дальность ~v²/g ≈ 12 (хватает на танковый Range=10).
+        /// Все снаряды медленнее в это число раз.
+        /// Гравитация / slowdown² — иначе дальность (v²/g) падает вдвое и снаряды не долетают.
         /// </summary>
-        public const double Gravity = 10.0;
+        public const double FlightSlowdown = 2.0;
+
+        /// <summary>
+        /// База 10. При FlightSlowdown=2 → 2.5: та же дуга/дальность, полёт просто дольше.
+        /// </summary>
+        public const double Gravity = 10.0 / (FlightSlowdown * FlightSlowdown);
+
+        public static float ScaleSpeed(float speed) => (float)(speed / FlightSlowdown);
+
+        public static double ScaleDuration(double seconds) => seconds * FlightSlowdown;
 
         /// <summary>
         /// Считает начальную скорость снаряда так, чтобы при данной дульной скорости попасть в цель.

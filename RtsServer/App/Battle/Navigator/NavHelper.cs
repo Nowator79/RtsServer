@@ -61,8 +61,12 @@ namespace RtsServer.App.Battle.Navigator
         public static bool IsBlockedByConstruction(Game? game, Vector2Int cell) =>
             IsBlockedByConstruction(game, cell.X, cell.Y);
 
+        /// <summary>Клетка с деревом (техника не проходит, пехота — да).</summary>
+        public static bool IsBlockedByForest(Map? map, int x, int y) =>
+            map?.Trees != null && map.Trees.HasTree(x, y);
+
         /// <summary>Проходимая земля без построек (стоячие юниты не учитываются).</summary>
-        public static bool IsTerrainWalkable(Map map, Game? game, int x, int y)
+        public static bool IsTerrainWalkable(Map map, Game? game, int x, int y, bool canTraverseForest = false)
         {
             if (map == null) return false;
             if (x < 0 || y < 0 || x >= map.Width || y >= map.Length)
@@ -70,6 +74,9 @@ namespace RtsServer.App.Battle.Navigator
 
             var chunk = map.GetArrayMap()[x, y];
             if (!IsWalkableHeight(chunk))
+                return false;
+
+            if (!canTraverseForest && IsBlockedByForest(map, x, y))
                 return false;
 
             return !IsBlockedByConstruction(game, x, y);
@@ -101,8 +108,12 @@ namespace RtsServer.App.Battle.Navigator
             return dx * dx + dy * dy < radius * radius - 1e-8;
         }
 
-        /// <summary>Круг задевает воду, обрыв относительно standHeight или постройку.</summary>
-        public static bool CircleHitsBlocked(Map map, Game? game, double cx, double cy, double radius, int standHeight)
+        /// <summary>
+        /// Круг задевает непроходимое. waterCraft=true — только вода (Id==0) проходима, суша блок.
+        /// </summary>
+        public static bool CircleHitsBlocked(
+            Map map, Game? game, double cx, double cy, double radius, int standHeight,
+            bool waterCraft = false, bool forestBlocks = false)
         {
             if (map == null || radius <= 0)
                 return false;
@@ -125,11 +136,21 @@ namespace RtsServer.App.Battle.Navigator
                         return true;
 
                     var tile = tiles[x, y];
+                    if (waterCraft)
+                    {
+                        // Корабль: суша/обрыв — блок; вода — ок.
+                        if (tile == null || tile.Id != 0)
+                            return true;
+                        continue;
+                    }
+
                     if (!IsWalkableHeight(tile))
                         return true;
                     if (!CanStepHeight(standHeight, tile.Height))
                         return true;
                     if (IsBlockedByConstruction(game, x, y))
+                        return true;
+                    if (forestBlocks && IsBlockedByForest(map, x, y))
                         return true;
                 }
             }
@@ -137,8 +158,8 @@ namespace RtsServer.App.Battle.Navigator
             return false;
         }
 
-        public static bool IsTerrainWalkable(Map map, Game? game, Vector2Int cell) =>
-            IsTerrainWalkable(map, game, cell.X, cell.Y);
+        public static bool IsTerrainWalkable(Map map, Game? game, Vector2Int cell, bool canTraverseForest = false) =>
+            IsTerrainWalkable(map, game, cell.X, cell.Y, canTraverseForest);
 
         public static Vector2Int FindNearestWalkable(Map map, Game? game, Vector2Int desired, int maxRadius = 16)
         {
